@@ -45,6 +45,12 @@ export interface ConfigTargetAssessment {
   parent: string;
 }
 
+export interface RepositoryRemovalResult {
+  clone: string;
+  repository: string;
+  poolRemoved: boolean;
+}
+
 export function assessConfigTarget(configPath?: string): ConfigTargetAssessment {
   const requested = resolveConfigPath(configPath);
   try {
@@ -208,6 +214,61 @@ export function addRepositoryMapping(
   });
 
   return loadConfig(updated.path).repositories;
+}
+
+export function removeRepositoryMapping(
+  configPath: string | undefined,
+  canonicalClone: string,
+): RepositoryRemovalResult {
+  const target = existingSafeTarget(configPath);
+  let result: RepositoryRemovalResult | undefined;
+
+  mutateConfigDocument(target, (raw) => {
+    let match:
+      | {
+          repositoryIndex: number;
+          cloneIndex: number;
+          clone: string;
+        }
+      | undefined;
+
+    for (const [repositoryIndex, configuredRepository] of raw.repositories.entries()) {
+      for (const [cloneIndex, configuredPath] of configuredRepository.clones.entries()) {
+        const configuredClone = canonicalExistingDirectory(configuredPath, path.dirname(target));
+        if (samePath(configuredClone, canonicalClone)) {
+          match = { repositoryIndex, cloneIndex, clone: configuredClone };
+          break;
+        }
+      }
+      if (match) break;
+    }
+
+    if (!match) throw new ConfigDocumentError(`Clone is not configured: ${canonicalClone}`);
+
+    const cloneCount = raw.repositories.reduce(
+      (total, configuredRepository) => total + configuredRepository.clones.length,
+      0,
+    );
+    if (cloneCount === 1) {
+      throw new ConfigDocumentError(
+        'Cannot remove the final configured repository clone; add another clone first',
+      );
+    }
+
+    const configuredRepository = raw.repositories[match.repositoryIndex]!;
+    const poolRemoved = configuredRepository.clones.length === 1;
+    result = {
+      clone: match.clone,
+      repository: normalizeGitHubRepository(configuredRepository.repository),
+      poolRemoved,
+    };
+
+    if (poolRemoved) raw.repositories.splice(match.repositoryIndex, 1);
+    else configuredRepository.clones.splice(match.cloneIndex, 1);
+  });
+
+  if (!result) throw new ConfigDocumentError(`Clone is not configured: ${canonicalClone}`);
+  return result;
 }
 
 export function removeWatchedFolder(configPath: string | undefined, folder: string): string[] {
