@@ -23,6 +23,7 @@ import {
   createConfigDocument,
   mutateConfigDocument,
   readRawConfigDocument,
+  removeRepositoryMapping,
   removeWatchedFolder,
 } from '../../src/config/document.js';
 import { loadConfig } from '../../src/config/load.js';
@@ -168,6 +169,125 @@ describe('configuration documents', () => {
         clones: [fixture.clone, secondClone],
       },
     ]);
+  });
+
+  it('removes an exact clone while preserving its pool, config settings, and checkout contents', () => {
+    const fixture = createFixture();
+    const secondClone = path.join(fixture.root, 'second-clone');
+    const gitDirectory = path.join(fixture.clone, '.git');
+    const dirtyMarker = path.join(fixture.clone, 'dirty-marker.txt');
+    const untrackedMarker = path.join(fixture.clone, 'untracked-marker.txt');
+    mkdirSync(secondClone);
+    mkdirSync(gitDirectory);
+    writeFileSync(dirtyMarker, 'dirty checkout contents\n');
+    writeFileSync(untrackedMarker, 'untracked checkout contents\n');
+    fixture.raw.repositories[0] = {
+      repository: 'https://github.com/Example/Widget.git',
+      clones: [path.basename(fixture.clone), secondClone],
+    };
+    createConfigDocument(fixture.configPath, fixture.raw);
+    const original = readFileSync(fixture.configPath, 'utf8');
+
+    const result = removeRepositoryMapping(fixture.configPath, fixture.clone);
+
+    expect(result).toEqual({
+      clone: fixture.clone,
+      repository: 'example/widget',
+      poolRemoved: false,
+    });
+    const raw = readRawConfigDocument(fixture.configPath).raw;
+    expect(raw.repositories).toEqual([
+      {
+        repository: 'https://github.com/Example/Widget.git',
+        clones: [secondClone],
+      },
+    ]);
+    expect(raw.pollIntervalSeconds).toBe(30);
+    expect(raw.providers).toEqual(fixture.raw.providers);
+    expect(readFileSync(`${fixture.configPath}.backup`, 'utf8')).toBe(original);
+    expect(lstatSync(fixture.configPath).mode & 0o777).toBe(0o600);
+    expect(lstatSync(`${fixture.configPath}.backup`).mode & 0o777).toBe(0o600);
+    expect(existsSync(fixture.clone)).toBe(true);
+    expect(existsSync(gitDirectory)).toBe(true);
+    expect(readFileSync(dirtyMarker, 'utf8')).toBe('dirty checkout contents\n');
+    expect(readFileSync(untrackedMarker, 'utf8')).toBe('untracked checkout contents\n');
+  });
+
+  it('removes an empty repository pool when another pool remains', () => {
+    const fixture = createFixture();
+    const secondClone = path.join(fixture.root, 'second-clone');
+    mkdirSync(secondClone);
+    fixture.raw.repositories.push({ repository: 'example/second', clones: [secondClone] });
+    createConfigDocument(fixture.configPath, fixture.raw);
+
+    const result = removeRepositoryMapping(fixture.configPath, fixture.clone);
+
+    expect(result).toEqual({
+      clone: fixture.clone,
+      repository: 'example/widget',
+      poolRemoved: true,
+    });
+    expect(readRawConfigDocument(fixture.configPath).raw.repositories).toEqual([
+      { repository: 'example/second', clones: [secondClone] },
+    ]);
+    expect(existsSync(fixture.clone)).toBe(true);
+  });
+
+  it('matches a configured symlink alias to an already-canonical clone', () => {
+    const fixture = createFixture();
+    const secondClone = path.join(fixture.root, 'second-clone');
+    const cloneAlias = path.join(fixture.root, 'clone-alias');
+    mkdirSync(secondClone);
+    symlinkSync(fixture.clone, cloneAlias);
+    fixture.raw.repositories[0]!.clones = [cloneAlias, secondClone];
+    createConfigDocument(fixture.configPath, fixture.raw);
+
+    const result = removeRepositoryMapping(fixture.configPath, realpathSync(cloneAlias));
+
+    expect(result.clone).toBe(fixture.clone);
+    expect(result.poolRemoved).toBe(false);
+    expect(readRawConfigDocument(fixture.configPath).raw.repositories[0]!.clones).toEqual([
+      secondClone,
+    ]);
+    expect(existsSync(cloneAlias)).toBe(true);
+    expect(existsSync(fixture.clone)).toBe(true);
+  });
+
+  it.each([
+    {
+      name: 'the final configured clone',
+      arrange: (fixture: ReturnType<typeof createFixture>) => fixture.clone,
+      error: /final configured repository clone/i,
+    },
+    {
+      name: 'an unconfigured directory',
+      arrange: (fixture: ReturnType<typeof createFixture>) => {
+        const unconfigured = path.join(fixture.root, 'unconfigured');
+        mkdirSync(unconfigured);
+        return unconfigured;
+      },
+      error: /clone is not configured/i,
+    },
+    {
+      name: 'a nested directory',
+      arrange: (fixture: ReturnType<typeof createFixture>) => {
+        const nested = path.join(fixture.clone, 'nested');
+        mkdirSync(nested);
+        return nested;
+      },
+      error: /clone is not configured/i,
+    },
+  ])('refuses to remove $name without changing the configuration', ({ arrange, error }) => {
+    const fixture = createFixture();
+    const requestedClone = arrange(fixture);
+    createConfigDocument(fixture.configPath, fixture.raw);
+    const original = readFileSync(fixture.configPath, 'utf8');
+
+    expect(() => removeRepositoryMapping(fixture.configPath, requestedClone)).toThrow(error);
+
+    expect(readFileSync(fixture.configPath, 'utf8')).toBe(original);
+    expect(existsSync(`${fixture.configPath}.backup`)).toBe(false);
+    expect(existsSync(requestedClone)).toBe(true);
   });
 
   it.each([
