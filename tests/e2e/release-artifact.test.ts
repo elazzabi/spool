@@ -166,7 +166,7 @@ describe('GitHub release artifact contract', () => {
   });
 
   it('refuses to create an incomplete manifest', () => {
-    const outputDirectory = mkdtempSync(path.join(tmpdir(), 'mdspool-release-incomplete-'));
+    const outputDirectory = mkdtempSync(path.join(tmpdir(), 'spool-release-incomplete-'));
     const tuple = DECLARED_RELEASE_TUPLES[0]!;
     createReleaseArchive({
       runtimeRoot: createRuntimeRoot({
@@ -186,8 +186,8 @@ describe('GitHub release artifact contract', () => {
     );
   });
 
-  it('runs both extracted aliases outside the repository', () => {
-    const outputDirectory = mkdtempSync(path.join(tmpdir(), 'mdspool-release-smoke-'));
+  it('runs the extracted executable outside the repository', () => {
+    const outputDirectory = mkdtempSync(path.join(tmpdir(), 'spool-release-smoke-'));
     const runtimeRoot = createRuntimeRoot({
       nodeAbi: Number(process.versions.modules),
       nodeMajor: Number(process.versions.node.split('.')[0]),
@@ -215,7 +215,7 @@ function createFixtureRelease(
     readonly mutate?: (root: string) => void;
   } = {},
 ) {
-  const outputDirectory = mkdtempSync(path.join(tmpdir(), 'mdspool-release-contract-'));
+  const outputDirectory = mkdtempSync(path.join(tmpdir(), 'spool-release-contract-'));
   for (const tuple of DECLARED_RELEASE_TUPLES) {
     const runtimeRoot = createRuntimeRoot({
       ...tuple,
@@ -252,7 +252,7 @@ function createRuntimeRoot(tuple: {
   readonly nodeMajor: number;
   readonly nodeAbi: number;
 }): string {
-  const root = mkdtempSync(path.join(tmpdir(), 'mdspool-runtime-root-'));
+  const root = mkdtempSync(path.join(tmpdir(), 'spool-runtime-root-'));
   writeRuntimeFile(root, 'LICENSE.md', 'fixture license\n');
   writeRuntimeFile(root, 'README.md', '# Fixture\n');
   writeRuntimeFile(root, 'package.json', `${JSON.stringify(runtimePackage(version), null, 2)}\n`);
@@ -276,7 +276,7 @@ function createRuntimeRoot(tuple: {
     'release-runtime.json',
     `${JSON.stringify({ ...tuple, nativeModule }, null, 2)}\n`,
   );
-  for (const alias of ['spool', 'mdspool']) {
+  for (const alias of ['spool']) {
     const launcher = path.join(root, 'bin', alias);
     writeRuntimeFile(root, `bin/${alias}`, `#!/bin/sh\nprintf '%s\\n' '${version}'\n`);
     chmodSync(launcher, 0o755);
@@ -286,7 +286,7 @@ function createRuntimeRoot(tuple: {
 
 function runtimePackage(packageVersion: string) {
   return {
-    name: 'mdspool',
+    name: 'spool',
     version: packageVersion,
     type: 'module',
     dependencies: { 'better-sqlite3': '12.11.1' },

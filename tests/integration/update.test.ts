@@ -60,7 +60,7 @@ describe('managed update command', () => {
     );
 
     expect(result).toMatchObject({ status: 'updated', exitCode: 0, version: '1.1.0' });
-    expect(readlinkSync(path.join(fixture.prefix, 'lib/mdspool/current'))).toBe('versions/1.1.0');
+    expect(readlinkSync(path.join(fixture.prefix, 'lib/spool/current'))).toBe('versions/1.1.0');
     expect(fixture.userData()).toEqual(before);
   });
 
@@ -99,7 +99,7 @@ describe('managed update command', () => {
       },
     );
     expect(result).toMatchObject({ status: 'updated', version: '1.1.0' });
-    expect(readlinkSync(path.join(fixture.prefix, 'lib/mdspool/current'))).toBe('versions/1.1.0');
+    expect(readlinkSync(path.join(fixture.prefix, 'lib/spool/current'))).toBe('versions/1.1.0');
   });
 
   it('reports the installed exact version as current without acquisition', async () => {
@@ -131,9 +131,9 @@ describe('managed update command', () => {
       expect(JSON.parse(writes.join(''))).toEqual(result);
       expect(result).toMatchObject({ status: 'unavailable', exitCode: 1, version: '1.2.0' });
       expect(result.message).toContain(`Expected an exact stable version: ${version}`);
-      expect(result.message).toContain('MDSpool 1.2.0 remains active');
+      expect(result.message).toContain('spool 1.2.0 remains active');
       expect(acquire).not.toHaveBeenCalled();
-      expect(readlinkSync(path.join(fixture.prefix, 'lib/mdspool/current'))).toBe('versions/1.2.0');
+      expect(readlinkSync(path.join(fixture.prefix, 'lib/spool/current'))).toBe('versions/1.2.0');
     },
   );
 
@@ -152,11 +152,11 @@ describe('managed update command', () => {
       },
     );
     expect(unavailable.status).toBe('unavailable');
-    expect(readlinkSync(path.join(fixture.prefix, 'lib/mdspool/current'))).toBe('versions/1.0.0');
+    expect(readlinkSync(path.join(fixture.prefix, 'lib/spool/current'))).toBe('versions/1.0.0');
   });
 
   it('explains unmanaged and daemon-active refusal', async () => {
-    const root = mkdtempSync(path.join(tmpdir(), 'mdspool-update-unmanaged-'));
+    const root = mkdtempSync(path.join(tmpdir(), 'spool-update-unmanaged-'));
     expect((await runManagedUpdate({ prefix: path.join(root, 'prefix') })).status).toBe(
       'unmanaged',
     );
@@ -204,7 +204,7 @@ describe('managed update command', () => {
       },
     );
     expect(rolledBack.status).toBe('rolled-back');
-    expect(readlinkSync(path.join(fixture.prefix, 'lib/mdspool/current'))).toBe('versions/1.0.0');
+    expect(readlinkSync(path.join(fixture.prefix, 'lib/spool/current'))).toBe('versions/1.0.0');
   });
 
   it('reports an inconsistent install when restoring the current pointer fails', async () => {
@@ -244,7 +244,7 @@ describe('managed update command', () => {
     const candidate = createCandidate(fixture.root, '1.1.0');
     const shadow = path.join(fixture.root, 'shadow-bin');
     mkdirSync(shadow);
-    for (const alias of ['spool', 'mdspool']) {
+    for (const alias of ['spool']) {
       const executable = path.join(shadow, alias);
       writeFileSync(executable, '#!/bin/sh\nexit 0\n');
       chmodSync(executable, 0o755);
@@ -358,7 +358,7 @@ describe('managed release response bounds', () => {
 });
 
 async function managedFixture(version: string) {
-  const root = mkdtempSync(path.join(tmpdir(), 'mdspool-update-'));
+  const root = mkdtempSync(path.join(tmpdir(), 'spool-update-'));
   const prefix = path.join(root, 'prefix');
   const data = path.join(root, 'user-data');
   mkdirSync(data);
@@ -440,7 +440,7 @@ function releaseManifest(artifactSize: number) {
       architecture,
       nodeMajor: 24,
       nodeAbi: 137,
-      filename: `mdspool-v${version}-node24-abi137-${platform}-${architecture}.tar.gz`,
+      filename: `spool-v${version}-node24-abi137-${platform}-${architecture}.tar.gz`,
       sha256: 'a'.repeat(64),
       size: artifactSize,
     })),
@@ -460,7 +460,7 @@ function createCandidate(
   mkdirSync(path.join(candidate, 'dist/cli'), { recursive: true });
   writeFileSync(
     path.join(candidate, 'package.json'),
-    `${JSON.stringify({ name: 'mdspool', version })}\n`,
+    `${JSON.stringify({ name: 'spool', version })}\n`,
   );
   writeFileSync(
     path.join(candidate, 'release-runtime.json'),
@@ -469,7 +469,7 @@ function createCandidate(
   const cli = path.join(candidate, 'dist/cli/index.js');
   writeFileSync(cli, '#!/usr/bin/env node\n');
   chmodSync(cli, 0o755);
-  for (const alias of ['spool', 'mdspool']) {
+  for (const alias of ['spool']) {
     const launcher = path.join(candidate, 'bin', alias);
     writeFileSync(launcher, `#!/bin/sh\nprintf '%s\\n' '${version}'\n`);
     chmodSync(launcher, 0o755);

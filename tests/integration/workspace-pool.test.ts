@@ -767,7 +767,7 @@ describe('workspace pool', () => {
 });
 
 function fixtureRoot(): string {
-  const root = mkdtempSync(path.join(tmpdir(), 'mdspool-workspace-'));
+  const root = mkdtempSync(path.join(tmpdir(), 'spool-workspace-'));
   roots.push(root);
   return root;
 }
@@ -781,8 +781,8 @@ function createRepository(root: string, name: string, repository = 'example/widg
 
 function createRepositoryAt(clone: string, repository = 'example/widget'): void {
   git(clone, ['init', '-b', 'main']);
-  git(clone, ['config', 'user.name', 'MDSpool Test']);
-  git(clone, ['config', 'user.email', 'mdspool@example.test']);
+  git(clone, ['config', 'user.name', 'spool Test']);
+  git(clone, ['config', 'user.email', 'spool@example.test']);
   writeFileSync(path.join(clone, 'tracked.txt'), 'baseline\n');
   git(clone, ['add', 'tracked.txt']);
   git(clone, ['commit', '-m', 'baseline']);

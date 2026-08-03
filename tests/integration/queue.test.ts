@@ -13,7 +13,7 @@ import path from 'node:path';
 
 import { describe, expect, it, vi } from 'vitest';
 
-import type { MDSpoolConfig } from '../../src/config/schema.js';
+import type { SpoolConfig } from '../../src/config/schema.js';
 import { openLedgerDatabase } from '../../src/ledger/database.js';
 import { OutboxRepository } from '../../src/ledger/outbox.js';
 import { LedgerRepository } from '../../src/ledger/repositories.js';
@@ -958,7 +958,7 @@ describe('terminal workspace disposition', () => {
 
     const attempt = ledger.listAttempts(job.id)[0]!;
     expect(readFileSync(note, 'utf8')).toContain(
-      `data-mdspool-event="workspace-ack:${attempt.id}:0"`,
+      `data-spool-event="workspace-ack:${attempt.id}:0"`,
     );
     writeFileSync(
       note,
@@ -996,7 +996,7 @@ describe('terminal workspace disposition', () => {
     expect(refusedActions[0]?.completedAt).not.toBeNull();
     expect(refusedActions[1]?.completedAt).toBeNull();
     expect(readFileSync(note, 'utf8')).toContain(
-      `data-mdspool-event="workspace-ack:${attempt.id}:1"`,
+      `data-spool-event="workspace-ack:${attempt.id}:1"`,
     );
 
     unlinkSync(path.join(fixture.clones[0]!, 'agent-left.txt'));
@@ -1055,9 +1055,7 @@ describe('terminal workspace disposition', () => {
     });
     await reconciler.runPass();
 
-    expect(readFileSync(context.note, 'utf8')).toContain(
-      `data-mdspool-event="${successorEventKey}"`,
-    );
+    expect(readFileSync(context.note, 'utf8')).toContain(`data-spool-event="${successorEventKey}"`);
     expect(readFileSync(context.note, 'utf8')).not.toContain('workspace acknowledge');
     expect(context.ledger.listFollowUps(context.job.id)).toHaveLength(2);
     await reconciler.shutdown();
@@ -1126,7 +1124,7 @@ describe('terminal workspace disposition', () => {
     expect(readFileSync(context.note, 'utf8')).not.toContain('Workspace: Quarantined');
     const actionLine = readFileSync(context.note, 'utf8')
       .split('\n')
-      .find((line) => line.includes(`data-mdspool-event="${context.eventKey}"`));
+      .find((line) => line.includes(`data-spool-event="${context.eventKey}"`));
     expect(actionLine).toContain('- [x]');
     expect(
       context.ledger.listFollowUps(context.job.id).every(({ completedAt }) => completedAt),
@@ -1178,7 +1176,7 @@ describe('terminal workspace disposition', () => {
     const source = readFileSync(context.note, 'utf8');
     const actionLine = source
       .split('\n')
-      .find((line) => line.includes(`data-mdspool-event="${context.eventKey}"`));
+      .find((line) => line.includes(`data-spool-event="${context.eventKey}"`));
     if (!actionLine) throw new Error('Expected generated workspace action');
     writeFileSync(context.note, source.replace(`${actionLine}\n`, ''));
     writeFileSync(copiedNote, `${actionLine.replace('- [ ]', '- [x]')}\n`);
@@ -1366,7 +1364,7 @@ function checkWorkspaceAction(note: string, eventKey: string): void {
   const source = readFileSync(note, 'utf8');
   const actionLine = source
     .split('\n')
-    .find((line) => line.includes(`data-mdspool-event="${eventKey}"`));
+    .find((line) => line.includes(`data-spool-event="${eventKey}"`));
   if (!actionLine) throw new Error('Expected generated workspace action');
   writeFileSync(note, source.replace(actionLine, actionLine.replace('- [ ]', '- [x]')));
 }
@@ -1376,9 +1374,9 @@ function schedulerFixture(cloneCount: number): {
   vault: string;
   state: string;
   clones: string[];
-  config: MDSpoolConfig;
+  config: SpoolConfig;
 } {
-  const root = mkdtempSync(path.join(tmpdir(), 'mdspool-queue-'));
+  const root = mkdtempSync(path.join(tmpdir(), 'spool-queue-'));
   const vault = path.join(root, 'vault');
   const state = path.join(root, 'state');
   mkdirSync(vault);
@@ -1401,7 +1399,7 @@ function schedulerFixture(cloneCount: number): {
     state,
     clones,
     config: {
-      configPath: path.join(root, 'mdspool.config.yaml'),
+      configPath: path.join(root, 'spool.config.yaml'),
       vaults: [vault],
       stateDirectory: state,
       timeZone: 'Europe/Istanbul',
@@ -1429,7 +1427,7 @@ function trackedTask(taskId: string): string {
     '',
     '- PR https://github.com/example/widget/pull/1',
     '  - [ ] @fake Review',
-    '    ```mdspool',
+    '    ```spool',
     `    Task: ${taskId}`,
     `    Anchor: ${anchor}`,
     '    ```',

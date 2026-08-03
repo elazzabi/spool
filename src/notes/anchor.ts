@@ -4,5 +4,5 @@ export function receiptAnchorFor(taskId: string): string {
     .replace(/[^A-Za-z0-9-]+/g, '-')
     .replace(/^-+|-+$/g, '')
     .slice(0, 96);
-  return `mdspool-${compact || 'task'}`;
+  return `spool-${compact || 'task'}`;
 }

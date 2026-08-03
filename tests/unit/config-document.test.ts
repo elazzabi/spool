@@ -232,7 +232,7 @@ describe('configuration documents', () => {
     expect(existsSync(`${fixture.configPath}.backup`)).toBe(false);
   });
 
-  it('does not remove a lock owned by another MDSpool writer', () => {
+  it('does not remove a lock owned by another spool writer', () => {
     const fixture = createFixture();
     createConfigDocument(fixture.configPath, fixture.raw);
     const lockPath = `${fixture.configPath}.lock`;
@@ -252,7 +252,7 @@ describe('configuration documents', () => {
         repository: 'example/second',
         clones: [secondClone],
       }),
-    ).toThrow(/another MDSpool configuration update/i);
+    ).toThrow(/another spool configuration update/i);
     expect(existsSync(lockPath)).toBe(true);
     expect(readFileSync(lockPath, 'utf8')).toBe(`${JSON.stringify(lock)}\n`);
     expect(readFileSync(fixture.configPath, 'utf8')).toBe(original);
@@ -323,7 +323,7 @@ function createFixture(): {
   clone: string;
   raw: RawConfig;
 } {
-  const root = realpathSync(mkdtempSync(path.join(tmpdir(), 'mdspool-config-document-')));
+  const root = realpathSync(mkdtempSync(path.join(tmpdir(), 'spool-config-document-')));
   const vault = path.join(root, 'vault');
   const secondVault = path.join(root, 'second-vault');
   const state = path.join(root, 'state');

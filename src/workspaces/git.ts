@@ -270,7 +270,7 @@ export async function restoreWorkspaceBaselineBranch(
 
   let disabledHooksPath: string;
   try {
-    disabledHooksPath = await mkdtemp(path.join(tmpdir(), 'mdspool-disabled-hooks-'));
+    disabledHooksPath = await mkdtemp(path.join(tmpdir(), 'spool-disabled-hooks-'));
   } catch (error) {
     return {
       kind: 'refused',

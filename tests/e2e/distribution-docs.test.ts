@@ -18,10 +18,9 @@ describe('end-user distribution documentation', () => {
 
     expect(quickStart).toContain('Node.js 24');
     expect(quickStart).toContain(
-      'curl -fsSL https://raw.githubusercontent.com/elazzabi/mdspool/main/install.sh | sh',
+      'curl -fsSL https://raw.githubusercontent.com/elazzabi/spool/main/install.sh | sh',
     );
     expect(quickStart).toContain('spool --version');
-    expect(quickStart).toContain('mdspool --version');
     expect(quickStart).toContain('spool init');
     expect(quickStart).not.toMatch(/(?:^|\n)\s*(?:git clone|npm\s+(?:ci|install|link|publish)\b)/i);
   });
@@ -32,12 +31,12 @@ describe('end-user distribution documentation', () => {
     expect(readme).toContain('spool update');
     expect(readme).toContain('spool update --version');
     expect(readme).toContain('spool uninstall');
-    expect(readme).toContain('lib/mdspool/versions/');
-    expect(readme).toContain('lib/mdspool/current');
+    expect(readme).toContain('lib/spool/versions/');
+    expect(readme).toContain('lib/spool/current');
     expect(readme).toContain('managed-install.json');
     expect(readme).toMatch(/rollback|restores? the previous/i);
     expect(readme).toMatch(/occupied|collision/i);
-    expect(readme).toMatch(/npm-linked/i);
+    expect(readme).toMatch(/npm is contributor tooling only/i);
     expect(readme).toContain('export PATH="$HOME/.local/bin:$PATH"');
     expect(readme).toMatch(/configuration.*state.*logs.*Markdown/is);
   });

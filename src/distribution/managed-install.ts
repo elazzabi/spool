@@ -113,7 +113,7 @@ export class DaemonActiveInstallError extends ManagedInstallError {
   constructor(pid: number) {
     super(
       'daemon-active',
-      `MDSpool daemon pid ${String(pid)} is active. Stop it and retry: kill ${String(pid)}`,
+      `spool daemon pid ${String(pid)} is active. Stop it and retry: kill ${String(pid)}`,
     );
     this.name = 'DaemonActiveInstallError';
     this.pid = pid;
@@ -137,7 +137,7 @@ export async function installManagedRelease(
     if (comparison < 0) {
       throw new ManagedInstallError(
         'downgrade',
-        `Refusing to downgrade managed MDSpool from ${ownership.version} to ${normalized.version}`,
+        `Refusing to downgrade managed spool from ${ownership.version} to ${normalized.version}`,
       );
     }
     if (comparison === 0) {
@@ -179,7 +179,7 @@ export async function uninstallManagedRelease(
   if (!ownership || canonicalPrefix(ownership.activePrefix) !== prefix) {
     throw new ManagedInstallError(
       'unmanaged',
-      `No installer-owned MDSpool installation exists under ${prefix}`,
+      `No installer-owned spool installation exists under ${prefix}`,
     );
   }
   preflightAliasTargets(layout, ownership);
@@ -194,7 +194,7 @@ export async function uninstallManagedRelease(
       status: 'uninstalled',
       exitCode: 0,
       version: ownership.version,
-      message: `Uninstalled managed MDSpool ${ownership.version}; configuration and state were preserved.`,
+      message: `Uninstalled managed spool ${ownership.version}; configuration and state were preserved.`,
     };
   });
 }
@@ -246,7 +246,7 @@ async function activateCandidate(
       alias,
       path.join(path.dirname(aliasPath), `.${alias}-${nonce}`),
     ]),
-  ) as Record<'spool' | 'mdspool', string>;
+  ) as Record<'spool', string>;
   const previousCurrent = pathExists(layout.currentPath) ? readlinkSync(layout.currentPath) : null;
   const previousOwnershipContents = previousOwnership ? readFileSync(layout.ownershipPath) : null;
   const existingAliases = new Set(
@@ -280,7 +280,7 @@ async function activateCandidate(
     symlinkSync(`versions/${request.version}`, currentTemporary);
     for (const [alias, temporary] of Object.entries(aliasTemporaries)) {
       if (existingAliases.has(alias)) continue;
-      symlinkSync(expectedAliasTarget(alias as 'spool' | 'mdspool'), temporary);
+      symlinkSync(expectedAliasTarget(alias as 'spool'), temporary);
     }
     writeFileSync(ownershipTemporary, `${JSON.stringify(ownershipFor(request), null, 2)}\n`, {
       mode: 0o600,
@@ -290,7 +290,7 @@ async function activateCandidate(
     switchedCurrent = true;
     for (const [alias, temporary] of Object.entries(aliasTemporaries)) {
       if (existingAliases.has(alias)) continue;
-      rename(temporary, layout.aliases[alias as 'spool' | 'mdspool']);
+      rename(temporary, layout.aliases[alias as 'spool']);
       publishedAliases.add(alias);
     }
     rename(ownershipTemporary, layout.ownershipPath);
@@ -319,7 +319,7 @@ async function activateCandidate(
     }
     for (const alias of publishedAliases) {
       attempt(`remove ${alias} alias`, () =>
-        remove(layout.aliases[alias as 'spool' | 'mdspool'], { force: true }),
+        remove(layout.aliases[alias as 'spool'], { force: true }),
       );
     }
     if (switchedCurrent) {
@@ -375,7 +375,7 @@ async function activateCandidate(
         : cleanupFailures.length > 0
           ? 'cleanup-failed'
           : 'failed-clean',
-      `${previousOwnership ? `Update failed and MDSpool ${previousOwnership.version} was restored` : 'Installation failed with no active managed version'}: ${detail}.${cleanupDetail}`,
+      `${previousOwnership ? `Update failed and spool ${previousOwnership.version} was restored` : 'Installation failed with no active managed version'}: ${detail}.${cleanupDetail}`,
     );
   }
 }
@@ -440,10 +440,10 @@ function validateInstallRequest(
       `Candidate release metadata is invalid: ${error instanceof Error ? error.message : String(error)}`,
     );
   }
-  if (packageManifest.name !== 'mdspool' || packageManifest.version !== request.version) {
+  if (packageManifest.name !== 'spool' || packageManifest.version !== request.version) {
     throw new ManagedInstallError(
       'invalid-candidate',
-      `Candidate package version does not match requested MDSpool ${request.version}`,
+      `Candidate package version does not match requested spool ${request.version}`,
     );
   }
   if (runtime.nodeAbi !== request.nodeAbi) {
@@ -459,7 +459,7 @@ function validateInstallRequest(
       'Candidate platform, architecture, or Node major does not match the running environment',
     );
   }
-  for (const relativePath of ['bin/spool', 'bin/mdspool', 'dist/cli/index.js']) {
+  for (const relativePath of ['bin/spool', 'dist/cli/index.js']) {
     const candidatePath = path.join(candidateDirectory, relativePath);
     try {
       accessSync(candidatePath, constants.R_OK | constants.X_OK);
@@ -476,7 +476,7 @@ function validateInstallRequest(
 function managedLayout(prefix: string) {
   const binaryDirectory = path.join(prefix, 'bin');
   const libraryDirectory = path.join(prefix, 'lib');
-  const managedRoot = path.join(libraryDirectory, 'mdspool');
+  const managedRoot = path.join(libraryDirectory, 'spool');
   return {
     binaryDirectory,
     libraryDirectory,
@@ -486,7 +486,6 @@ function managedLayout(prefix: string) {
     ownershipPath: path.join(managedRoot, MANAGED_INSTALL_FILENAME),
     aliases: {
       spool: path.join(binaryDirectory, 'spool'),
-      mdspool: path.join(binaryDirectory, 'mdspool'),
     },
   };
 }
@@ -549,7 +548,7 @@ function preflightAliasTargets(
     } catch {
       continue;
     }
-    const expected = expectedAliasTarget(alias as 'spool' | 'mdspool');
+    const expected = expectedAliasTarget(alias as 'spool');
     const owned =
       ownership &&
       canonicalPrefix(ownership.activePrefix) ===
@@ -592,7 +591,7 @@ function assertIntactManagedInstall(
       `Managed active version directory is missing or invalid: ${ownership.version}`,
     );
   }
-  for (const relativePath of ['bin/spool', 'bin/mdspool', 'dist/cli/index.js']) {
+  for (const relativePath of ['bin/spool', 'dist/cli/index.js']) {
     try {
       accessSync(path.join(versionPath, relativePath), constants.R_OK | constants.X_OK);
     } catch {
@@ -606,7 +605,7 @@ function assertIntactManagedInstall(
     if (
       !pathExists(aliasPath) ||
       !lstatSync(aliasPath).isSymbolicLink() ||
-      readlinkSync(aliasPath) !== expectedAliasTarget(alias as 'spool' | 'mdspool')
+      readlinkSync(aliasPath) !== expectedAliasTarget(alias as 'spool')
     ) {
       throw new ManagedInstallError(
         'damaged-install',
@@ -616,8 +615,8 @@ function assertIntactManagedInstall(
   }
 }
 
-function expectedAliasTarget(alias: 'spool' | 'mdspool'): string {
-  return `../lib/mdspool/current/bin/${alias}`;
+function expectedAliasTarget(alias: 'spool'): string {
+  return `../lib/spool/current/bin/${alias}`;
 }
 
 function pathResult(
@@ -631,11 +630,11 @@ function pathResult(
       status: successStatus,
       exitCode: 0,
       version,
-      message: `Managed MDSpool ${version} is ${successStatus === 'current' ? 'already current' : 'active'}.`,
+      message: `Managed spool ${version} is ${successStatus === 'current' ? 'already current' : 'active'}.`,
     };
   }
   const expectedDirectory = path.join(prefix, 'bin');
-  for (const alias of ['spool', 'mdspool'] as const) {
+  for (const alias of ['spool'] as const) {
     const resolved = findExecutable(alias, pathValue);
     const expected = path.join(expectedDirectory, alias);
     if (resolved !== expected) {
@@ -644,7 +643,7 @@ function pathResult(
         status: 'attention',
         exitCode: 1,
         version,
-        message: `${detail} Put the managed aliases first: export PATH="${expectedDirectory}:$PATH"`,
+        message: `${detail} Put the managed executable first: export PATH="${expectedDirectory}:$PATH"`,
       };
     }
   }
@@ -652,7 +651,7 @@ function pathResult(
     status: successStatus,
     exitCode: 0,
     version,
-    message: `Managed MDSpool ${version} is ${successStatus === 'current' ? 'already current' : 'active'}.`,
+    message: `Managed spool ${version} is ${successStatus === 'current' ? 'already current' : 'active'}.`,
   };
 }
 
@@ -674,7 +673,7 @@ function defaultSmokeCandidate(
   temporaryHome: string,
   expectedVersion: string,
 ) {
-  for (const alias of ['spool', 'mdspool']) {
+  for (const alias of ['spool']) {
     const result = spawnSync(path.join(candidateDirectory, 'bin', alias), ['--version'], {
       cwd: temporaryHome,
       encoding: 'utf8',
@@ -683,7 +682,7 @@ function defaultSmokeCandidate(
     if (result.status !== 0 || result.stdout.trim() !== expectedVersion) {
       throw new ManagedInstallError(
         'smoke-failed',
-        `Candidate ${alias} did not report MDSpool ${expectedVersion}: ${result.stderr.trim()}`,
+        `Candidate ${alias} did not report spool ${expectedVersion}: ${result.stderr.trim()}`,
       );
     }
   }
@@ -691,7 +690,7 @@ function defaultSmokeCandidate(
 
 async function defaultVerifyActivated(prefix: string, version: string) {
   await withTemporaryHome((temporaryHome) => {
-    for (const alias of ['spool', 'mdspool']) {
+    for (const alias of ['spool']) {
       const result = spawnSync(path.join(prefix, 'bin', alias), ['--version'], {
         cwd: temporaryHome,
         encoding: 'utf8',
@@ -700,7 +699,7 @@ async function defaultVerifyActivated(prefix: string, version: string) {
       if (result.status !== 0 || result.stdout.trim() !== version) {
         throw new ManagedInstallError(
           'activation-failed',
-          `Activated ${alias} did not report MDSpool ${version}`,
+          `Activated ${alias} did not report spool ${version}`,
         );
       }
     }
@@ -710,7 +709,7 @@ async function defaultVerifyActivated(prefix: string, version: string) {
 async function withTemporaryHome<T>(
   operation: (temporaryHome: string) => T | Promise<T>,
 ): Promise<T> {
-  const temporaryHome = mkdtempSync(path.join(os.tmpdir(), 'mdspool-install-smoke-'));
+  const temporaryHome = mkdtempSync(path.join(os.tmpdir(), 'spool-install-smoke-'));
   try {
     return await operation(temporaryHome);
   } finally {
@@ -745,7 +744,7 @@ async function withConfiguredDaemonLock<T>(
     );
   }
   const stateDirectory = resolveConfiguredPath(parsed.stateDirectory, path.dirname(configPath));
-  const databasePath = path.join(stateDirectory, 'mdspool.sqlite');
+  const databasePath = path.join(stateDirectory, 'spool.sqlite');
   if (!existsSync(databasePath)) return operation();
 
   const { default: Database } = await import('better-sqlite3');

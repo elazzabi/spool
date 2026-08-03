@@ -24,7 +24,7 @@ import type { ProviderEventParseResult } from '../../src/providers/types.js';
 const fakeAgent = path.resolve('examples/providers/fake-agent.mjs');
 
 function fixture() {
-  const root = mkdtempSync(path.join(tmpdir(), 'mdspool-provider-runner-'));
+  const root = mkdtempSync(path.join(tmpdir(), 'spool-provider-runner-'));
   const logPath = path.join(root, 'attempt.log');
   closeDescriptor(openSync(logPath, 'wx', 0o600));
   return { root, logPath };
@@ -35,14 +35,14 @@ describe('provider process runner', () => {
     const { root, logPath } = fixture();
     const target = pinLaunchTarget(process.execPath, root);
     const hostileArgument = 'literal $(touch should-not-exist); `false`';
-    process.env.MDSPOOL_ALLOWED_FOR_TEST = 'inherited-value';
-    process.env.MDSPOOL_NOT_ALLOWED_FOR_TEST = 'secret-value';
+    process.env.SPOOL_ALLOWED_FOR_TEST = 'inherited-value';
+    process.env.SPOOL_NOT_ALLOWED_FOR_TEST = 'secret-value';
 
     const result = await runProviderProcess({
       target,
       args: [fakeAgent, '--scenario', 'capture', '--extra', hostileArgument],
-      environmentAllowlist: ['MDSPOOL_ALLOWED_FOR_TEST'],
-      environment: { MDSPOOL_EXPLICIT_FOR_TEST: 'explicit-value' },
+      environmentAllowlist: ['SPOOL_ALLOWED_FOR_TEST'],
+      environment: { SPOOL_EXPLICIT_FOR_TEST: 'explicit-value' },
       prompt: Buffer.from('prompt\0bytes\n', 'utf8'),
       logTarget: pinLogTarget(logPath),
       limits: { maxLogBytes: 64_000, maxJsonLineBytes: 16_000, maxOutputBytes: 64_000 },

@@ -1,6 +1,6 @@
 import { execFile } from 'node:child_process';
 
-import type { MDSpoolConfig, ProviderConfig } from '../../config/schema.js';
+import type { SpoolConfig, ProviderConfig } from '../../config/schema.js';
 import {
   builtinProviderName,
   builtinProviderProbeArgs,
@@ -79,7 +79,7 @@ interface DoctorReportPresentation {
 }
 
 export async function collectDoctorReport(
-  config: MDSpoolConfig,
+  config: SpoolConfig,
   dependencies: { commandRunner?: DoctorCommandRunner; environment?: NodeJS.ProcessEnv } = {},
 ): Promise<DoctorReport> {
   const commandRunner = dependencies.commandRunner ?? runCommand;
@@ -127,7 +127,7 @@ export function presentDoctorReport(report: DoctorReport, presenter: StaticCliPr
     renderArgument: renderPresentedArg,
     renderCapability: sanitizeTerminalText,
   });
-  presenter.intro('MDSpool doctor');
+  presenter.intro('spool doctor');
   presenter.section('Paths', [
     `Config: ${presentation.configPath}`,
     `State: ${presentation.stateDirectory}`,
@@ -217,7 +217,7 @@ function capitalize(value: string): string {
 
 async function inspectProvider(
   provider: ProviderConfig,
-  config: MDSpoolConfig,
+  config: SpoolConfig,
   commandRunner: DoctorCommandRunner,
   environment: NodeJS.ProcessEnv,
 ): Promise<ProviderDoctorReport> {

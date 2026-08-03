@@ -43,13 +43,13 @@ export function selectSmokeProviders(waiver) {
 }
 
 export async function runProviderSmoke() {
-  const waiver = parseProviderWaiver(process.env.MDSPOOL_SMOKE_WAIVE);
+  const waiver = parseProviderWaiver(process.env.SPOOL_SMOKE_WAIVE);
   const selected = selectSmokeProviders(waiver);
-  const root = mkdtempSync(path.join(tmpdir(), 'mdspool-live-smoke-'));
+  const root = mkdtempSync(path.join(tmpdir(), 'spool-live-smoke-'));
   let runtime;
   try {
     const { loadConfig } = await import('../dist/config/load.js');
-    const { openMDSpoolRuntime } = await import('../dist/scheduler/service.js');
+    const { openSpoolRuntime } = await import('../dist/scheduler/service.js');
     const { weeklyNoteFilename } = await import('../dist/notes/week.js');
     const bin = path.join(root, 'bin');
     const vault = path.join(root, 'vault');
@@ -65,7 +65,7 @@ export async function runProviderSmoke() {
     if (missing.length > 0) {
       throw new Error(
         `Required provider executables are unavailable: ${missing.join(', ')}. ` +
-          'Use MDSPOOL_SMOKE_WAIVE only for an explicit local support exclusion.',
+          'Use SPOOL_SMOKE_WAIVE only for an explicit local support exclusion.',
       );
     }
     const invocationLogs = new Map();
@@ -86,7 +86,7 @@ export async function runProviderSmoke() {
         defaultArgs: smokeFlags(name),
       };
       repositories.push({
-        repository: `mdspool-smoke/${name}`,
+        repository: `spool-smoke/${name}`,
         clones: [clone],
       });
     }
@@ -101,7 +101,7 @@ export async function runProviderSmoke() {
     const day = new Intl.DateTimeFormat('en-US', { weekday: 'long', timeZone }).format(now);
     const notePath = path.join(vault, noteName);
     writeFileSync(notePath, renderSmokeNote(selected, day));
-    const configPath = path.join(root, 'mdspool.config.json');
+    const configPath = path.join(root, 'spool.config.json');
     writeFileSync(
       configPath,
       `${JSON.stringify(
@@ -121,7 +121,7 @@ export async function runProviderSmoke() {
     );
 
     const config = loadConfig(configPath);
-    runtime = await openMDSpoolRuntime(config);
+    runtime = await openSpoolRuntime(config);
     if (runtime.warnings.some((warning) => /unsupported|unavailable|failed/i.test(warning))) {
       throw new Error(`Provider preflight failed: ${runtime.warnings.join('; ')}`);
     }
@@ -169,7 +169,7 @@ export async function runProviderSmoke() {
       if (!inspect) throw new Error(`${name} did not expose an inspect command`);
       const latestResponse = attempt.latestOutput;
       if (!latestResponse?.trim()) throw new Error(`${name} did not expose a latest response`);
-      const expectedMarker = `MDSPOOL_SMOKE_${name.toUpperCase()}`;
+      const expectedMarker = `SPOOL_SMOKE_${name.toUpperCase()}`;
       if (!latestResponse.includes(expectedMarker)) {
         throw new Error(`${name} latest response omitted ${expectedMarker}`);
       }
@@ -220,7 +220,7 @@ export async function runProviderSmoke() {
     }
     for (const name of selected) {
       const taskRegion = new RegExp(
-        `@${name}[^\\n]*[\\s\\S]*?mdspool:receipt:start[^\\n]*[\\s\\S]*?Status: Completed[\\s\\S]*?mdspool:receipt:end`,
+        `@${name}[^\\n]*[\\s\\S]*?spool:receipt:start[^\\n]*[\\s\\S]*?Status: Completed[\\s\\S]*?spool:receipt:end`,
       );
       if (!taskRegion.test(transformedNote)) {
         throw new Error(`The weekly note did not receive ${name} completion evidence`);
@@ -309,7 +309,7 @@ function writeGhShim(target, logPath) {
 import { appendFileSync } from 'node:fs';
 const argv = process.argv.slice(2);
 appendFileSync(${JSON.stringify(logPath)}, JSON.stringify({ argv }) + '\\n', { mode: 0o600 });
-process.stderr.write('GitHub CLI is disabled inside the MDSpool smoke boundary.\\n');
+process.stderr.write('GitHub CLI is disabled inside the spool smoke boundary.\\n');
 process.exit(97);
 `;
   writeFileSync(target, source, { mode: 0o700 });
@@ -319,24 +319,24 @@ process.exit(97);
 function initializeClone(directory, provider) {
   mkdirSync(directory);
   git(directory, ['init', '--initial-branch=main']);
-  git(directory, ['config', 'user.name', 'MDSpool Smoke']);
+  git(directory, ['config', 'user.name', 'spool Smoke']);
   git(directory, ['config', 'user.email', 'smoke@example.invalid']);
   writeFileSync(
     path.join(directory, 'README.md'),
-    `# MDSpool ${provider} smoke\n\nMarker: MDSPOOL_SMOKE_${provider.toUpperCase()}\n`,
+    `# spool ${provider} smoke\n\nMarker: SPOOL_SMOKE_${provider.toUpperCase()}\n`,
   );
   git(directory, ['add', 'README.md']);
   git(directory, ['commit', '-m', 'Initial disposable smoke fixture']);
-  git(directory, ['remote', 'add', 'origin', `https://github.com/mdspool-smoke/${provider}.git`]);
+  git(directory, ['remote', 'add', 'origin', `https://github.com/spool-smoke/${provider}.git`]);
   return realpathSync(directory);
 }
 
 function renderSmokeNote(providers, day) {
-  const lines = [`# MDSpool live provider smoke`, '', `## ${day}`, ''];
+  const lines = [`# spool live provider smoke`, '', `## ${day}`, ''];
   for (const provider of providers) {
-    lines.push(`- [ ] PR https://github.com/mdspool-smoke/${provider}/pull/1`);
+    lines.push(`- [ ] PR https://github.com/spool-smoke/${provider}/pull/1`);
     lines.push(
-      `  - [ ] @${provider} Do not use the network or any GitHub tool. Read local README.md only, make no changes, and reply with exactly MDSPOOL_SMOKE_${provider.toUpperCase()}.`,
+      `  - [ ] @${provider} Do not use the network or any GitHub tool. Read local README.md only, make no changes, and reply with exactly SPOOL_SMOKE_${provider.toUpperCase()}.`,
     );
   }
   return `${lines.join('\n')}\n`;

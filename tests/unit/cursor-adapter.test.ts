@@ -22,7 +22,7 @@ function supportedPreflight() {
 }
 
 function launchFixture() {
-  const cwd = mkdtempSync(path.join(tmpdir(), 'mdspool-cursor-adapter-'));
+  const cwd = mkdtempSync(path.join(tmpdir(), 'spool-cursor-adapter-'));
   const logPath = path.join(cwd, 'attempt.log');
   closeSync(openSync(logPath, 'wx', 0o600));
   return { cwd, logPath };

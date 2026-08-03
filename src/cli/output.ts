@@ -5,7 +5,7 @@ import * as clack from '@clack/prompts';
 
 import { sanitizeTerminalText } from '../terminal.js';
 import { isDefaultConfigPath } from '../config/paths.js';
-import type { MDSpoolConfig } from '../config/schema.js';
+import type { SpoolConfig } from '../config/schema.js';
 
 export { sanitizeTerminalText } from '../terminal.js';
 
@@ -108,7 +108,7 @@ export function renderShellCommand(
     .join(' ');
 }
 
-export function spoolArgv(config: Pick<MDSpoolConfig, 'configPath'>, ...args: string[]): string[] {
+export function spoolArgv(config: Pick<SpoolConfig, 'configPath'>, ...args: string[]): string[] {
   if (isDefaultConfigPath(config.configPath)) {
     return ['spool', ...args];
   }

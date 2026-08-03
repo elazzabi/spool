@@ -20,7 +20,7 @@ function openFixture(): {
   ledger: LedgerRepository;
   stateDirectory: string;
 } {
-  const stateDirectory = mkdtempSync(path.join(tmpdir(), 'mdspool-recovery-'));
+  const stateDirectory = mkdtempSync(path.join(tmpdir(), 'spool-recovery-'));
   const database = openLedgerDatabase(stateDirectory);
   databases.push(database);
   return { database, ledger: new LedgerRepository(database), stateDirectory };

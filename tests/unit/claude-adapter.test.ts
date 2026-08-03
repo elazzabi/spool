@@ -34,7 +34,7 @@ function ingest(observations: ProviderObservationAccumulator, result: ProviderEv
 }
 
 function launchFixture() {
-  const cwd = mkdtempSync(path.join(tmpdir(), 'mdspool-claude-adapter-'));
+  const cwd = mkdtempSync(path.join(tmpdir(), 'spool-claude-adapter-'));
   const logPath = path.join(cwd, 'attempt.log');
   closeSync(openSync(logPath, 'wx', 0o600));
   return { cwd, logPath };

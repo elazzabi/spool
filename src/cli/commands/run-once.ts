@@ -1,5 +1,5 @@
-import type { MDSpoolConfig } from '../../config/schema.js';
-import { openMDSpoolRuntime, runUntilConverged } from '../../scheduler/service.js';
+import type { SpoolConfig } from '../../config/schema.js';
+import { openSpoolRuntime, runUntilConverged } from '../../scheduler/service.js';
 import { sanitizeTerminalText, type StaticCliPresenter } from '../output.js';
 
 export interface RunOnceReport {
@@ -11,8 +11,8 @@ export interface RunOnceReport {
   warnings: string[];
 }
 
-export async function runOnce(config: MDSpoolConfig): Promise<RunOnceReport> {
-  const runtime = await openMDSpoolRuntime(config, { mode: 'run-once' });
+export async function runOnce(config: SpoolConfig): Promise<RunOnceReport> {
+  const runtime = await openSpoolRuntime(config, { mode: 'run-once' });
   let outcome: 'clean' | 'failed' = 'failed';
   let results;
   try {
@@ -39,7 +39,7 @@ export async function runOnce(config: MDSpoolConfig): Promise<RunOnceReport> {
 }
 
 export function presentRunOnceReport(report: RunOnceReport, presenter: StaticCliPresenter): void {
-  presenter.intro('MDSpool reconciliation');
+  presenter.intro('spool reconciliation');
   presenter.section('Summary', summaryLines(report));
   for (const warning of report.warnings) {
     presenter.warn(sanitizeTerminalText(warning));

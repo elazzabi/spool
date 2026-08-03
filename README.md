@@ -1,10 +1,10 @@
-# MDSpool — run coding agents from Markdown
+# spool — run coding agents from Markdown
 
 **Turn a todo in Obsidian or any Markdown folder into a durable local agent job.**
 
-MDSpool watches the notes you already use, sends explicitly tagged tasks to Claude Code, Codex, Cursor Agent, or Pi, writes progress beneath the original todo, and routes human follow-ups back into your notes. Your notes stay the control plane; your agents work in local Git clones you choose.
+spool watches the notes you already use, sends explicitly tagged tasks to Claude Code, Codex, Cursor Agent, or Pi, writes progress beneath the original todo, and routes human follow-ups back into your notes. Your notes stay the control plane; your agents work in local Git clones you choose.
 
-If Markdown is already where you decide what to do, MDSpool makes it where you delegate too.
+If Markdown is already where you decide what to do, spool makes it where you delegate too.
 
 [Quick start](#quick-start) · [Install and update](#managed-installation-and-updates) · [Your first task](#your-first-task) · [Workspaces](#workspaces-are-folders-on-purpose) · [Safety](#safety-first) · [Commands](#everyday-commands)
 
@@ -12,10 +12,10 @@ If Markdown is already where you decide what to do, MDSpool makes it where you d
 
 You need Node.js 24, Git, and at least one supported agent CLI installed and signed in. The first release channel supports Node 24 on macOS or Linux, on either `x64` or `arm64`.
 
-Install the latest stable MDSpool release from GitHub:
+Install the latest stable spool release from GitHub:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/elazzabi/mdspool/main/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/elazzabi/spool/main/install.sh | sh
 ```
 
 The default prefix is `$HOME/.local`. If its `bin` directory is not already on your shell's `PATH`, add it and restart your shell:
@@ -28,7 +28,6 @@ Confirm the installed release, run the guided setup, then start the daemon:
 
 ```sh
 spool --version
-mdspool --version
 spool init
 spool daemon
 ```
@@ -48,32 +47,31 @@ The installer selects the release archive for the current operating system, arch
 Install an exact stable version instead of the latest one:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/elazzabi/mdspool/main/install.sh | sh -s -- --version 0.1.0
+curl -fsSL https://raw.githubusercontent.com/elazzabi/spool/main/install.sh | sh -s -- --version 0.1.0
 ```
 
 Choose a different installation prefix, or combine `--prefix` with `--version`:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/elazzabi/mdspool/main/install.sh | sh -s -- --prefix "$HOME/.mdspool"
+curl -fsSL https://raw.githubusercontent.com/elazzabi/spool/main/install.sh | sh -s -- --prefix "$HOME/.spool"
 ```
 
-For a custom prefix, place its `bin` directory before older installations on `PATH` before running the aliases.
+For a custom prefix, place its `bin` directory before older installations on `PATH` before running the command.
 
 The managed layout under the selected prefix keeps program files separate from your data:
 
 ```text
 $HOME/.local/
 ├── bin/
-│   ├── spool -> ../lib/mdspool/current/bin/spool
-│   └── mdspool -> ../lib/mdspool/current/bin/mdspool
-└── lib/mdspool/
+│   └── spool -> ../lib/spool/current/bin/spool
+└── lib/spool/
     ├── current -> versions/0.1.0
     ├── versions/
     │   └── 0.1.0/
     └── managed-install.json
 ```
 
-Immutable releases live under `lib/mdspool/versions/`; `lib/mdspool/current` is the single atomic pointer shared by both aliases, and `managed-install.json` records installer ownership.
+Immutable releases live under `lib/spool/versions/`; `lib/spool/current` is the atomic active-version pointer, and `managed-install.json` records installer ownership.
 
 Update to the latest stable release, or request an exact newer release:
 
@@ -82,9 +80,9 @@ spool update
 spool update --version 0.2.0
 ```
 
-Updates only operate on installations with valid installer ownership metadata. Requesting the installed version is a no-op; unavailable versions and downgrades are refused. MDSpool never checks for or installs updates automatically.
+Updates only operate on installations with valid installer ownership metadata. Requesting the installed version is a no-op; unavailable versions and downgrades are refused. spool never checks for or installs updates automatically.
 
-Remove installer-owned program files and both aliases with:
+Remove installer-owned program files and the managed executable with:
 
 ```sh
 spool uninstall
@@ -94,30 +92,23 @@ Uninstall preserves your configuration, state and SQLite ledger, operational log
 
 ### Failure and rollback posture
 
-An update downloads and smoke-tests the candidate with isolated temporary configuration and state before activation. It then holds the configured daemon lock while atomically switching `lib/mdspool/current`. A failure before activation leaves the current version untouched; a failed post-activation check restores the previous version. A failed clean installation removes its staged version and leaves no managed aliases active.
+An update downloads and smoke-tests the candidate with isolated temporary configuration and state before activation. It then holds the configured daemon lock while atomically switching `lib/spool/current`. A failure before activation leaves the current version untouched; a failed post-activation check restores the previous version. A failed clean installation removes its staged version and leaves no managed executable active.
 
-MDSpool does not stop your daemon. If the configured ledger is owned by an active daemon, install, update, and uninstall refuse without changing program files and print a copyable `kill PID` recovery command. Stop that process deliberately, then retry.
+spool does not stop your daemon. If the configured ledger is owned by an active daemon, install, update, and uninstall refuse without changing program files and print a copyable `kill PID` recovery command. Stop that process deliberately, then retry.
 
 ### Collisions, PATH shadowing, and older links
 
-The installer never overwrites unrelated files. If either target in the prefix's `bin` directory is occupied by a file or link it does not own, installation refuses with no changes. Inspect the reported path and remove or relocate it only when you know what created it.
+The installer never overwrites unrelated files. If the target in the prefix's `bin` directory is occupied by a file or link it does not own, installation refuses with no changes. Inspect the reported path and remove or relocate it only when you know what created it.
 
-A different `spool` or `mdspool` earlier on `PATH` is a shadow, not an owned-target collision. The managed release remains installed, but the command returns an attention result with the correction. For the default prefix:
+A different `spool` earlier on `PATH` is a shadow, not an owned-target collision. The managed release remains installed, but the command returns an attention result with the correction. For the default prefix:
 
 ```sh
 export PATH="$HOME/.local/bin:$PATH"
 hash -r
 command -v spool
-command -v mdspool
 ```
 
-Both `command -v` results should point into `$HOME/.local/bin`. If an older source checkout created an npm-linked executable, remove that legacy link before retrying:
-
-```sh
-npm unlink --global mdspool
-```
-
-If an old registry installation created the shadow instead, remove that legacy copy with `npm uninstall --global mdspool`. These are migration cleanup commands only; GitHub Releases are the maintained install and update channel.
+The `command -v` result should point into `$HOME/.local/bin`. If another executable shadows it, inspect that executable and remove or relocate it only when you know what created it.
 
 ## Your first task
 
@@ -130,7 +121,7 @@ Add a repository URL and an unchecked todo to any `.md` file in a watched folder
   - [ ] Explain the checkout flow and suggest missing tests @codex
 ```
 
-MDSpool will:
+spool will:
 
 1. Match the repository to one of your configured local clones.
 2. Start Codex with the todo, its surrounding Markdown, and repository context.
@@ -141,9 +132,9 @@ The note becomes a live handoff:
 
 ````markdown
 - [ ] Explain the checkout flow and suggest missing tests @codex
-  ```mdspool
+  ```spool
   Task: task-123
-  Anchor: mdspool-task-123
+  Anchor: spool-task-123
   Session: 11111111-1111-4111-8111-111111111111
   Status: Working
   Last update: 2026-07-20T09:15:00.000Z
@@ -160,7 +151,7 @@ The note becomes a live handoff:
   ```
 ````
 
-You keep writing ordinary Markdown. MDSpool only owns the generated receipt and follow-up rows; unrelated notes and todos stay untouched.
+You keep writing ordinary Markdown. spool only owns the generated receipt and follow-up rows; unrelated notes and todos stay untouched.
 
 ## Highlights
 
@@ -175,11 +166,11 @@ You keep writing ordinary Markdown. MDSpool only owns the generated receipt and 
 
 ## Workspaces are folders on purpose
 
-A workspace is an ordinary local Git checkout that MDSpool may lend to one job at a time. It is not a branch, an agent session, or a directory that MDSpool creates for you.
+A workspace is an ordinary local Git checkout that spool may lend to one job at a time. It is not a branch, an agent session, or a directory that spool creates for you.
 
-MDSpool deliberately uses complete, separate checkout folders instead of creating or managing Git worktrees. This costs more disk space, but the mental model is simpler: each folder can be opened, inspected, moved, or removed on its own, with its own Git state and local tooling. This is an opinionated design choice, not a temporary limitation.
+spool deliberately uses complete, separate checkout folders instead of creating or managing Git worktrees. This costs more disk space, but the mental model is simpler: each folder can be opened, inspected, moved, or removed on its own, with its own Git state and local tooling. This is an opinionated design choice, not a temporary limitation.
 
-Several folders can track the same GitHub repository. MDSpool groups them into one repository pool by their `origin` and treats every clean folder as independent capacity:
+Several folders can track the same GitHub repository. spool groups them into one repository pool by their `origin` and treats every clean folder as independent capacity:
 
 ```sh
 git clone https://github.com/example/widget.git ~/src/widget-agent-1
@@ -189,7 +180,7 @@ spool config repository add ~/src/widget-agent-1
 spool config repository add ~/src/widget-agent-2
 ```
 
-With those two workspaces, two jobs for `example/widget` can run concurrently. A third waits until one becomes available. MDSpool never clones a repository, switches its branch, pulls changes, or cleans it on your behalf.
+With those two workspaces, two jobs for `example/widget` can run concurrently. A third waits until one becomes available. spool never clones a repository, switches its branch, pulls changes, or cleans it on your behalf.
 
 See the configured pools and the live state of every workspace with:
 
@@ -197,21 +188,21 @@ See the configured pools and the live state of every workspace with:
 spool workspace list
 ```
 
-The output explains whether each folder is eligible, unsafe, or leased, followed by the durable leases MDSpool knows about. `spool config show` displays the static repository-to-folder mapping instead.
+The output explains whether each folder is eligible, unsafe, or leased, followed by the durable leases spool knows about. `spool config show` displays the static repository-to-folder mapping instead.
 
-When a job finishes without changing its workspace, MDSpool releases the folder for another job. If the workspace changed, MDSpool quarantines it for human inspection rather than guessing whether the changes are valuable. After inspecting and restoring it to the state you want, check the generated Markdown action. If the daemon is stopped, use `spool workspace acknowledge /absolute/path/to/clone`.
+When a job finishes without changing its workspace, spool releases the folder for another job. If the workspace changed, spool quarantines it for human inspection rather than guessing whether the changes are valuable. After inspecting and restoring it to the state you want, check the generated Markdown action. If the daemon is stopped, use `spool workspace acknowledge /absolute/path/to/clone`.
 
 To stop using an idle workspace, stop the daemon and edit the configuration file shown by `spool config show`. Remove its path from `repositories[].clones`; if it is the pool's final clone, remove that repository entry instead. The configuration must retain at least one repository pool with at least one clone. Start the daemon again when you are done. This only unregisters the folder; it never deletes it from disk.
 
 ## Safety first
 
-MDSpool is a local dispatcher, not an autonomous GitHub bot.
+spool is a local dispatcher, not an autonomous GitHub bot.
 
-MDSpool itself does **not** create GitHub comments, reviews, approvals, issues, branches, commits, pull requests, or repository clones. A pull-request URL supplies context only; it does not authorize a GitHub write. Delegated agents return results to their local sessions by default and may change an assigned workspace only when the task and their configured permissions allow it.
+spool itself does **not** create GitHub comments, reviews, approvals, issues, branches, commits, pull requests, or repository clones. A pull-request URL supplies context only; it does not authorize a GitHub write. Delegated agents return results to their local sessions by default and may change an assigned workspace only when the task and their configured permissions allow it.
 
-MDSpool also never stashes, resets, cleans, or overwrites a clone to make it available. Dirty or busy clones are skipped. If a workspace changes unexpectedly during a job, MDSpool quarantines it and asks you to inspect it before reuse.
+spool also never stashes, resets, cleans, or overwrites a clone to make it available. Dirty or busy clones are skipped. If a workspace changes unexpectedly during a job, spool quarantines it and asks you to inspect it before reuse.
 
-When a job leaves a clean task branch checked out, that branch remains visible while you review the result. Checking the generated quarantine action, or running `spool workspace acknowledge` while the daemon is stopped, authorizes MDSpool to attempt a non-forcing switch back to the branch captured before the job. MDSpool releases the clone only if that branch still points to its captured commit and a fresh inspection exactly matches the original safe state. The task branch is preserved. If the checkout is dirty, detached, otherwise changed, or the captured branch moved, restoration is refused and the clone stays quarantined for another inspection; MDSpool never stashes, resets, cleans, deletes a branch, or forces local changes away. Crash recovery after an already-approved sentinel removal is the irreversible boundary: it completes the pending release because the checkout step can no longer be safely retried under the removed sentinel.
+When a job leaves a clean task branch checked out, that branch remains visible while you review the result. Checking the generated quarantine action, or running `spool workspace acknowledge` while the daemon is stopped, authorizes spool to attempt a non-forcing switch back to the branch captured before the job. spool releases the clone only if that branch still points to its captured commit and a fresh inspection exactly matches the original safe state. The task branch is preserved. If the checkout is dirty, detached, otherwise changed, or the captured branch moved, restoration is refused and the clone stays quarantined for another inspection; spool never stashes, resets, cleans, deletes a branch, or forces local changes away. Crash recovery after an already-approved sentinel removal is the irreversible boundary: it completes the pending release because the checkout step can no longer be safely retried under the removed sentinel.
 
 The setup wizard presents access-profile options where providers support them. Review the selected agent and arguments before accepting the final setup summary.
 
@@ -224,11 +215,11 @@ The setup wizard presents access-profile options where providers support them. R
 | Cursor Agent | `@cursor` |
 | Pi           | `@pi`     |
 
-MDSpool uses the arguments you configure for each CLI. Choosing an agent's permissions and operating mode is up to you.
+spool uses the arguments you configure for each CLI. Choosing an agent's permissions and operating mode is up to you.
 
-MDSpool reuses each CLI's normal signed-in configuration. Ambient API-key and OAuth-token environment variables are deliberately removed from note-driven child processes because provider output is projected back into your notes. Sign in through the provider CLI instead of putting credentials in MDSpool configuration.
+spool reuses each CLI's normal signed-in configuration. Ambient API-key and OAuth-token environment variables are deliberately removed from note-driven child processes because provider output is projected back into your notes. Sign in through the provider CLI instead of putting credentials in spool configuration.
 
-The parsers are currently validated against Claude Code 2.1.212, Codex CLI 0.144.5, Cursor Agent 2026.01.28-fd13201, and `@earendil-works/pi-coding-agent` 0.74.2. Compatible versions can still run; MDSpool warns when a version has not been validated and fails malformed runtime events conservatively.
+The parsers are currently validated against Claude Code 2.1.212, Codex CLI 0.144.5, Cursor Agent 2026.01.28-fd13201, and `@earendil-works/pi-coding-agent` 0.74.2. Compatible versions can still run; spool warns when a version has not been validated and fails malformed runtime events conservatively.
 
 > **Pi boundary:** Pi's built-in read tools can access any file readable by your OS user, and a Pi configuration without Git tools cannot inspect Git diffs. Its configured tools are not path containment.
 
@@ -239,7 +230,7 @@ Every regular `.md` file at any depth below a watched folder is eligible. A task
 - It is an unchecked Markdown todo.
 - Its text begins or ends with a configured provider directive.
 - It has repository context from its own text or an ancestor list item.
-- MDSpool can safely parse the note and identify the generated region it owns.
+- spool can safely parse the note and identify the generated region it owns.
 - A matching configured clone is available.
 
 Checked todos, prose mentions in the middle, fenced examples, symbolic links, malformed notes, and copied or edited receipt markers do not dispatch.
@@ -257,11 +248,11 @@ Multiple directives for the same agent are independent jobs. A repository with s
 
 ### Follow-ups stay in your notes
 
-When an agent exposes a reliable needs-input event, MDSpool adds an indented `Agent needs input` todo with the exact inspect or resume command. When the agent resumes, that row is checked and retained, so the note records how often intervention was needed.
+When an agent exposes a reliable needs-input event, spool adds an indented `Agent needs input` todo with the exact inspect or resume command. When the agent resumes, that row is checked and retained, so the note records how often intervention was needed.
 
-If a completed job changed its assigned checkout, MDSpool also adds an `Inspect quarantined workspace` action. Its text names the captured branch and explains that checking it will attempt restoration before releasing the clone, so review happens while the task branch is still checked out.
+If a completed job changed its assigned checkout, spool also adds an `Inspect quarantined workspace` action. Its text names the captured branch and explains that checking it will attempt restoration before releasing the clone, so review happens while the task branch is still checked out.
 
-When a job in the current root weekly note completes, MDSpool checks the source directive and adds an unchecked `Check agent output using command …` todo beneath it. For tasks in any other note, MDSpool checks the source directive there and inserts the review todo once in the current weekly note with an Obsidian backlink. MDSpool never creates the weekly note for you; it holds the action until the note exists.
+When a job in the current root weekly note completes, spool checks the source directive and adds an unchecked `Check agent output using command …` todo beneath it. For tasks in any other note, spool checks the source directive there and inserts the review todo once in the current weekly note with an Obsidian backlink. spool never creates the weekly note for you; it holds the action until the note exists.
 
 See [`examples/vault`](examples/vault) for realistic notes with unrelated todos, inherited repository context, pull requests, concurrent jobs, and all four providers.
 
@@ -282,7 +273,7 @@ spool run-once
 spool logs
 spool logs --follow
 
-# Ask MDSpool to cancel a job using the ID in its receipt.
+# Ask spool to cancel a job using the ID in its receipt.
 spool cancel TASK_ID
 
 # After inspecting a quarantined clone. An active daemon handles the request on its next pass.
@@ -293,7 +284,7 @@ Workspace acknowledgment does not require knowing which note started the job. If
 running, the command records a durable request and returns immediately; the daemon re-inspects the
 clone before releasing it. `spool workspace list` and `spool status` show whether the request is
 pending or was refused, including the refusal reason. If no daemon is running and another
-short-lived MDSpool command held the state lock, rerun the acknowledgment command to perform the
+short-lived spool command held the state lock, rerun the acknowledgment command to perform the
 inspection and release directly.
 
 Cancellation is evidence-based: a request becomes `Cancelled` only after the provider or supervised process supplies terminal proof.
@@ -301,7 +292,7 @@ Cancellation is evidence-based: a request becomes `Cancelled` only after the pro
 Use an explicit configuration file with any command when needed:
 
 ```sh
-spool --config /path/to/mdspool.config.yaml status
+spool --config /path/to/spool.config.yaml status
 ```
 
 ## Configuration
@@ -321,21 +312,21 @@ spool config watch remove /path/to/old/notes-folder
 spool config repository add ./another-widget
 ```
 
-Watched folders and workspaces serve different sides of MDSpool: watched folders contain the Markdown that creates jobs, while workspaces are the Git checkouts where agents run. Adding either kind of folder registers an existing directory; MDSpool does not create it. Stop the daemon before removing a watched folder. MDSpool refuses to remove the final watched folder or one still referenced by unfinished work, and it does not delete the directory from disk.
+Watched folders and workspaces serve different sides of spool: watched folders contain the Markdown that creates jobs, while workspaces are the Git checkouts where agents run. Adding either kind of folder registers an existing directory; spool does not create it. Stop the daemon before removing a watched folder. spool refuses to remove the final watched folder or one still referenced by unfinished work, and it does not delete the directory from disk.
 
 Restart the daemon after changing watched folders, repositories, providers, or provider arguments.
 
-YAML remains the inspectable source of truth for advanced changes. [`examples/mdspool.config.yaml`](examples/mdspool.config.yaml) documents the complete schema, including provider executables, literal argument arrays, polling, time zone, state location, and repository pools. With no `--config`, MDSpool uses the platform's normal user configuration directory.
+YAML remains the inspectable source of truth for advanced changes. [`examples/spool.config.yaml`](examples/spool.config.yaml) documents the complete schema, including provider executables, literal argument arrays, polling, time zone, state location, and repository pools. With no `--config`, spool uses the platform's normal user configuration directory.
 
-Provider arguments are passed as an argv array, never through a shell. Keep API keys, tokens, authorization headers, passwords, and other credentials out of `defaultArgs`. Manual YAML bypasses the onboarding validation that rejects credential-shaped and MDSpool-owned flags.
+Provider arguments are passed as an argv array, never through a shell. Keep API keys, tokens, authorization headers, passwords, and other credentials out of `defaultArgs`. Manual YAML bypasses the onboarding validation that rejects credential-shaped and spool-owned flags.
 
 ## Operational guarantees and limits
 
 - SQLite is authoritative; Markdown receipts are projections delivered through an idempotent outbox.
 - Only one daemon may own a state directory.
 - State must live outside watched Markdown folders and is owner-private on POSIX.
-- If a provider crosses the launch boundary without durable identity, MDSpool records the attempt as `Uncertain` and never relaunches it automatically.
-- Provider processes generally cannot be reattached after an MDSpool crash; the durable receipt preserves the honest evidence available.
+- If a provider crosses the launch boundary without durable identity, spool records the attempt as `Uncertain` and never relaunches it automatically.
+- Provider processes generally cannot be reattached after a spool crash; the durable receipt preserves the honest evidence available.
 - Operational logs contain bounded reason codes and opaque IDs, not note text, paths, prompts, provider output, session IDs, repository names, or argv values.
 - Operational history is capped at eight 8 MiB segments and archives older than 30 days are removed during owned runtime activity.
 - Terminal attempt logs are removed after 30 days; active and uncertain evidence is retained.
@@ -368,9 +359,9 @@ npm run test:runtime
 npm run smoke:providers
 ```
 
-`test:runtime` builds the CLI and uses a local package preview as an allowlist for GitHub release assembly. It rejects development-only files and registry publication metadata, checks both executable aliases, and verifies that the CLI and package versions match. Nothing is uploaded.
+`test:runtime` builds the CLI and uses a local package preview as an allowlist for GitHub release assembly. It rejects development-only files and registry publication metadata, checks the executable, and verifies that the CLI and package versions match. Nothing is uploaded.
 
-`smoke:providers` launches installed, authenticated providers in disposable repositories with restricted non-mutating flags. It verifies terminal proof, session identity, inspect commands, clean workspaces, and the no-GitHub-write boundary. All four providers are expected unless explicitly waived with `MDSPOOL_SMOKE_WAIVE`.
+`smoke:providers` launches installed, authenticated providers in disposable repositories with restricted non-mutating flags. It verifies terminal proof, session identity, inspect commands, clean workspaces, and the no-GitHub-write boundary. All four providers are expected unless explicitly waived with `SPOOL_SMOKE_WAIVE`.
 
 ## GitHub release process
 
@@ -386,4 +377,4 @@ This manual path builds, attests, downloads, and smokes the candidate matrix but
 
 ## License
 
-MDSpool is released under the [O'Saasy License](LICENSE.md).
+spool is released under the [O'Saasy License](LICENSE.md).

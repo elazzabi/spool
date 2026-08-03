@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 
-import type { MDSpoolConfig } from '../../config/schema.js';
+import type { SpoolConfig } from '../../config/schema.js';
 import { openLedgerDatabase } from '../../ledger/database.js';
 import {
   currentProcessStartIdentity,
@@ -21,7 +21,7 @@ export function workspaceAcknowledgmentLines(disposition: string | null): string
     : ['Acknowledgment: refused', `Reason: ${sanitizeTerminalText(request.reason)}`];
 }
 
-export async function listWorkspaces(config: MDSpoolConfig) {
+export async function listWorkspaces(config: SpoolConfig) {
   const database = openLedgerDatabase(config.stateDirectory);
   try {
     const ledger = new LedgerRepository(database);
@@ -38,7 +38,7 @@ export async function listWorkspaces(config: MDSpoolConfig) {
   }
 }
 
-export async function acknowledgeWorkspace(config: MDSpoolConfig, workspace: string) {
+export async function acknowledgeWorkspace(config: SpoolConfig, workspace: string) {
   const database = openLedgerDatabase(config.stateDirectory);
   const daemonLock = new DaemonLock(database);
   const owner: DaemonOwnershipIdentity = {
@@ -74,7 +74,7 @@ export function presentWorkspaceReport(
   report: Awaited<ReturnType<typeof listWorkspaces>>,
   presenter: StaticCliPresenter,
 ): void {
-  presenter.intro('MDSpool workspaces');
+  presenter.intro('spool workspaces');
   presenter.section('Repositories', [
     `${String(report.repositories.length)} configured ${report.repositories.length === 1 ? 'repository' : 'repositories'}`,
   ]);

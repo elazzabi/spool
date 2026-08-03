@@ -4,7 +4,7 @@ import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 
 import { spoolArgv } from '../cli/output.js';
-import type { MDSpoolConfig } from '../config/schema.js';
+import type { SpoolConfig } from '../config/schema.js';
 import { isTerminalJobState, type Attempt, type Job } from '../domain/job.js';
 import type { LedgerRepository } from '../ledger/repositories.js';
 import { fireAndForgetOperational } from '../logging/events.js';
@@ -67,7 +67,7 @@ type DispatcherOperationalLog = Pick<
 >;
 
 export class JobDispatcher {
-  readonly #config: MDSpoolConfig;
+  readonly #config: SpoolConfig;
   readonly #ledger: LedgerRepository;
   readonly #providers: ProviderRegistry;
   readonly #workspaces: WorkspacePool;
@@ -84,7 +84,7 @@ export class JobDispatcher {
   readonly #workspaceOutcomes = new Set<string>();
 
   constructor(options: {
-    config: MDSpoolConfig;
+    config: SpoolConfig;
     ledger: LedgerRepository;
     providers: ProviderRegistry;
     workspaces: WorkspacePool;
@@ -329,7 +329,7 @@ export class JobDispatcher {
           job.id,
           adapter,
           `runner-error:${attempt.attemptNumber}`,
-          'Provider runner failed after launch; MDSpool will not relaunch automatically.',
+          'Provider runner failed after launch; spool will not relaunch automatically.',
         );
         const disposition = await this.#workspaces.reconcileDisposition(handle);
         if (disposition.kind === 'quarantined') {
@@ -427,7 +427,7 @@ export class JobDispatcher {
 }
 
 function formatCapacityDiagnostic(
-  config: MDSpoolConfig,
+  config: SpoolConfig,
   repository: string,
   candidates: readonly WorkspaceCandidateResult[],
 ): string {
@@ -440,7 +440,7 @@ function formatCapacityDiagnostic(
   ].join('\n');
 }
 
-function capacityAction(config: MDSpoolConfig, candidate: WorkspaceCandidateResult): string {
+function capacityAction(config: SpoolConfig, candidate: WorkspaceCandidateResult): string {
   const blocker = candidate.blockingLease;
   if (blocker?.leaseState === 'Quarantined') {
     return `inspect the workspace, make it clean, then acknowledge it: ${renderCommandText(
@@ -453,7 +453,7 @@ function capacityAction(config: MDSpoolConfig, candidate: WorkspaceCandidateResu
     )}`;
   }
   if (blocker) {
-    return 'wait for MDSpool to finish releasing the completed task';
+    return 'wait for spool to finish releasing the completed task';
   }
   const reasons = candidate.inspection?.reasons ?? [];
   if (reasons.some((reason) => reason.code === 'worktree-dirty')) {
@@ -465,7 +465,7 @@ function capacityAction(config: MDSpoolConfig, candidate: WorkspaceCandidateResu
     return 'finish or abort the Git operation in this workspace';
   }
   if (candidate.code === 'leased') {
-    return `wait for the owning MDSpool process, then recheck: ${renderCommandText(
+    return `wait for the owning spool process, then recheck: ${renderCommandText(
       spoolArgv(config, 'workspace', 'list'),
     )}`;
   }
@@ -476,7 +476,7 @@ function capacityAction(config: MDSpoolConfig, candidate: WorkspaceCandidateResu
 
 export function compileDelegationPrompt(job: Job, canonicalWorkspace: string): string {
   return [
-    'MDSpool delegated this task from a Markdown source note.',
+    'spool delegated this task from a Markdown source note.',
     `Source note: ${job.sourcePath}`,
     `Canonical workspace: ${canonicalWorkspace}`,
     '',

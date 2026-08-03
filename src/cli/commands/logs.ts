@@ -1,6 +1,6 @@
 import type { Writable } from 'node:stream';
 
-import type { MDSpoolConfig } from '../../config/schema.js';
+import type { SpoolConfig } from '../../config/schema.js';
 import {
   followOperationalLogs,
   formatOperationalEvent,
@@ -8,7 +8,7 @@ import {
 } from '../../logging/reader.js';
 
 export async function runLogs(
-  config: MDSpoolConfig,
+  config: SpoolConfig,
   options: { readonly follow: boolean },
 ): Promise<void> {
   const abort = new AbortController();

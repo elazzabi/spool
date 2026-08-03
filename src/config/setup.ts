@@ -121,7 +121,7 @@ export const providerSetupDefinitions: readonly ProviderSetupDefinition[] = [
     authenticationArgs: ['auth', 'status', '--json'],
     access: {
       recommendedDescription: 'Use plan mode so Claude proposes changes without applying them.',
-      customOnlyDescription: "Start without MDSpool's recommended permission-mode baseline.",
+      customOnlyDescription: "Start without spool's recommended permission-mode baseline.",
       unrestricted: {
         label: 'Unrestricted (dangerous)',
         args: ['--dangerously-skip-permissions'],
@@ -156,7 +156,7 @@ export const providerSetupDefinitions: readonly ProviderSetupDefinition[] = [
     authenticationArgs: ['login', 'status'],
     access: {
       recommendedDescription: 'Use the read-only sandbox for filesystem access.',
-      customOnlyDescription: "Start without MDSpool's recommended sandbox baseline.",
+      customOnlyDescription: "Start without spool's recommended sandbox baseline.",
       unrestricted: {
         label: 'Unrestricted (dangerous)',
         args: ['--dangerously-bypass-approvals-and-sandbox'],
@@ -178,7 +178,7 @@ export const providerSetupDefinitions: readonly ProviderSetupDefinition[] = [
     authenticationArgs: ['about'],
     access: {
       recommendedDescription: 'Use plan mode so Cursor proposes changes without applying them.',
-      customOnlyDescription: "Start without MDSpool's recommended mode baseline.",
+      customOnlyDescription: "Start without spool's recommended mode baseline.",
       unrestricted: {
         label: 'Direct changes (dangerous)',
         args: ['--force'],
@@ -205,9 +205,9 @@ export const providerSetupDefinitions: readonly ProviderSetupDefinition[] = [
     authenticationArgs: [...piModelProbeArgs],
     access: {
       recommendedDescription:
-        "Use MDSpool's offline file-review tools with extensions, context files, skills, and prompt templates disabled.",
+        "Use spool's offline file-review tools with extensions, context files, skills, and prompt templates disabled.",
       customOnlyDescription:
-        'Start without the recommended baseline; MDSpool still appends its enforced Pi restrictions.',
+        'Start without the recommended baseline; spool still appends its enforced Pi restrictions.',
     },
     argvPolicy: {
       reservedArgs: [
@@ -543,14 +543,14 @@ export function publishSetupConfiguration(
 }
 
 export function defaultStateDirectory(): string {
-  if (process.env.XDG_STATE_HOME) return path.join(process.env.XDG_STATE_HOME, 'mdspool');
+  if (process.env.XDG_STATE_HOME) return path.join(process.env.XDG_STATE_HOME, 'spool');
   if (process.platform === 'darwin') {
-    return resolveUserPath('~/Library/Application Support/mdspool-state');
+    return resolveUserPath('~/Library/Application Support/spool-state');
   }
   if (process.platform === 'win32' && process.env.LOCALAPPDATA) {
-    return path.join(process.env.LOCALAPPDATA, 'mdspool', 'state');
+    return path.join(process.env.LOCALAPPDATA, 'spool', 'state');
   }
-  return resolveUserPath('~/.local/state/mdspool');
+  return resolveUserPath('~/.local/state/spool');
 }
 
 function authenticationEvidence(

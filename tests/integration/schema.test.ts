@@ -6,10 +6,10 @@ import Database from 'better-sqlite3';
 import { describe, expect, it } from 'vitest';
 
 import { LedgerOpenError, openLedgerDatabase } from '../../src/ledger/database.js';
-import { MDSPOOL_APPLICATION_ID, CURRENT_SCHEMA_VERSION } from '../../src/ledger/schema.js';
+import { SPOOL_APPLICATION_ID, CURRENT_SCHEMA_VERSION } from '../../src/ledger/schema.js';
 
 function stateDirectory(): string {
-  return mkdtempSync(path.join(tmpdir(), 'mdspool-schema-'));
+  return mkdtempSync(path.join(tmpdir(), 'spool-schema-'));
 }
 
 describe('ledger schema validation', () => {
@@ -17,7 +17,7 @@ describe('ledger schema validation', () => {
     const state = stateDirectory();
     const first = openLedgerDatabase(state);
     expect(first.raw.pragma('user_version', { simple: true })).toBe(CURRENT_SCHEMA_VERSION);
-    expect(first.raw.pragma('application_id', { simple: true })).toBe(MDSPOOL_APPLICATION_ID);
+    expect(first.raw.pragma('application_id', { simple: true })).toBe(SPOOL_APPLICATION_ID);
     first.close();
     expect(() => openLedgerDatabase(state).close()).not.toThrow();
   });
@@ -26,7 +26,7 @@ describe('ledger schema validation', () => {
     const state = stateDirectory();
     const database = openLedgerDatabase(state);
     database.close();
-    const raw = new Database(path.join(state, 'mdspool.sqlite'));
+    const raw = new Database(path.join(state, 'spool.sqlite'));
     raw.pragma('application_id = 0');
     raw.close();
 
@@ -36,7 +36,7 @@ describe('ledger schema validation', () => {
   it('rejects newer and unversioned non-empty schemas', () => {
     for (const version of [0, CURRENT_SCHEMA_VERSION + 1]) {
       const state = stateDirectory();
-      const raw = new Database(path.join(state, 'mdspool.sqlite'));
+      const raw = new Database(path.join(state, 'spool.sqlite'));
       raw.exec('CREATE TABLE unexpected (id INTEGER PRIMARY KEY)');
       raw.pragma(`user_version = ${version}`);
       raw.close();
@@ -46,7 +46,7 @@ describe('ledger schema validation', () => {
 
   it('rejects a versioned database that does not contain the v1 schema', () => {
     const state = stateDirectory();
-    const raw = new Database(path.join(state, 'mdspool.sqlite'));
+    const raw = new Database(path.join(state, 'spool.sqlite'));
     raw.exec('CREATE TABLE unexpected (id INTEGER PRIMARY KEY)');
     raw.pragma(`user_version = ${CURRENT_SCHEMA_VERSION}`);
     raw.close();
@@ -56,7 +56,7 @@ describe('ledger schema validation', () => {
 
   it('fails closed for corrupt databases', () => {
     const state = stateDirectory();
-    writeFileSync(path.join(state, 'mdspool.sqlite'), 'not a sqlite database');
+    writeFileSync(path.join(state, 'spool.sqlite'), 'not a sqlite database');
     expect(() => openLedgerDatabase(state)).toThrow(LedgerOpenError);
   });
 
@@ -64,7 +64,7 @@ describe('ledger schema validation', () => {
     const state = stateDirectory();
     const database = openLedgerDatabase(state);
     database.close();
-    const raw = new Database(path.join(state, 'mdspool.sqlite'));
+    const raw = new Database(path.join(state, 'spool.sqlite'));
     raw.pragma('foreign_keys = OFF');
     raw
       .prepare(
@@ -89,7 +89,7 @@ describe('ledger schema validation', () => {
   it('fails closed when SQLite cannot read the database file', () => {
     if (process.platform === 'win32' || process.getuid?.() === 0) return;
     const state = stateDirectory();
-    const file = path.join(state, 'mdspool.sqlite');
+    const file = path.join(state, 'spool.sqlite');
     const descriptor = openSync(file, 'w', 0o000);
     closeSync(descriptor);
     expect(() => openLedgerDatabase(state)).toThrow(LedgerOpenError);

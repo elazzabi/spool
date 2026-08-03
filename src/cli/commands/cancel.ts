@@ -1,9 +1,9 @@
-import type { MDSpoolConfig } from '../../config/schema.js';
+import type { SpoolConfig } from '../../config/schema.js';
 import { openLedgerDatabase } from '../../ledger/database.js';
 import { LedgerRepository } from '../../ledger/repositories.js';
 
 export function requestJobCancellation(
-  config: MDSpoolConfig,
+  config: SpoolConfig,
   taskOrJobId: string,
 ): { taskId: string; jobId: string; state: string; cancellationRequested: boolean } {
   const database = openLedgerDatabase(config.stateDirectory);

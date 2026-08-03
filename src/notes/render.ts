@@ -71,8 +71,8 @@ function containGeneratedSyntax(value: string): string {
   return value
     .replaceAll('<!--', '⟨!--')
     .replaceAll('-->', '--⟩')
-    .replace(/mdspool:(?:receipt|task|event)/gi, (match) => match.replace(':', '꞉'))
-    .replace(/data-mdspool-(?:event|task)/gi, (match) => match.replace('-', '꞉'));
+    .replace(/spool:(?:receipt|task|event)/gi, (match) => match.replace(':', '꞉'))
+    .replace(/data-spool-(?:event|task)/gi, (match) => match.replace('-', '꞉'));
 }
 
 /**
@@ -89,10 +89,10 @@ export function sanitizeGeneratedFollowUpText(
       value
         .replace(/<!--[^]*?-->/gu, ' ')
         .replace(
-          /<span\b[^>\r\n]*(?:data-mdspool-event|data-mdspool-task)[^>\r\n]*>(?:<\/span>)?/giu,
+          /<span\b[^>\r\n]*(?:data-spool-event|data-spool-task)[^>\r\n]*>(?:<\/span>)?/giu,
           ' ',
         )
-        .replace(/`{3,}[\t ]*mdspool/giu, 'mdspool'),
+        .replace(/`{3,}[\t ]*spool/giu, 'spool'),
     ),
   ).replace(/(^|\s)((?:[-+*]|\d+[.)])\s+)\[([ xX])\]/gu, '$1$2［$3］');
   if (maximum <= 0) return '';
@@ -136,7 +136,7 @@ export function renderReceipt(model: ReceiptModel, newline = '\n'): string {
   const rawOutput = model.latestOutput ?? '';
   const boundedOutput =
     rawOutput.length > maximum
-      ? `${rawOutput.slice(0, maximum)}${newline}… output truncated by MDSpool …`
+      ? `${rawOutput.slice(0, maximum)}${newline}… output truncated by spool …`
       : rawOutput;
   const output = containGeneratedSyntax(boundedOutput);
   const context = containGeneratedSyntax(model.context);
@@ -168,11 +168,11 @@ export function renderReceipt(model: ReceiptModel, newline = '\n'): string {
   ];
   const body = lines.join(newline);
   const fence = '`'.repeat(Math.max(3, longestBacktickRun(body) + 1));
-  return [`${fence}mdspool`, body, fence].join(newline);
+  return [`${fence}spool`, body, fence].join(newline);
 }
 
 export function renderEventMetadata(eventKey: string, taskId: string): string {
-  return `<span data-mdspool-event="${safeMarkerValue(eventKey)}" data-mdspool-task="${safeMarkerValue(taskId)}"></span>`;
+  return `<span data-spool-event="${safeMarkerValue(eventKey)}" data-spool-task="${safeMarkerValue(taskId)}"></span>`;
 }
 
 export function renderFollowUpTodo(model: FollowUpTodoModel, newline = '\n'): string {

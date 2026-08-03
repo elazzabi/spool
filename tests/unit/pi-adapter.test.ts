@@ -25,7 +25,7 @@ function supportedPreflight(versionOutput = version) {
 }
 
 function launchFixture() {
-  const cwd = mkdtempSync(path.join(tmpdir(), 'mdspool-pi-adapter-'));
+  const cwd = mkdtempSync(path.join(tmpdir(), 'spool-pi-adapter-'));
   const logPath = path.join(cwd, 'attempt.log');
   const sessionDirectory = path.join(cwd, 'state', 'pi', 'sessions');
   closeSync(openSync(logPath, 'wx', 0o600));

@@ -4,7 +4,7 @@ import path from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
-import type { MDSpoolConfig } from '../../src/config/schema.js';
+import type { SpoolConfig } from '../../src/config/schema.js';
 import { PiProvider } from '../../src/providers/pi.js';
 import { piSessionDirectory } from '../../src/providers/pi-session.js';
 import { createInstalledProviderRegistry } from '../../src/scheduler/service.js';
@@ -24,8 +24,8 @@ function executable(root: string, provider: 'claude' | 'pi'): string {
   return target;
 }
 
-function configFixture(): MDSpoolConfig {
-  const root = mkdtempSync(path.join(tmpdir(), 'mdspool-runtime-providers-'));
+function configFixture(): SpoolConfig {
+  const root = mkdtempSync(path.join(tmpdir(), 'spool-runtime-providers-'));
   const stateDirectory = path.join(root, 'state');
   const workspace = path.join(root, 'workspace');
   mkdirSync(stateDirectory, { mode: 0o700 });

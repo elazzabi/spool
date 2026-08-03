@@ -7,7 +7,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 import { openLedgerDatabase, type LedgerDatabase } from '../../src/ledger/database.js';
 import { LedgerRepository } from '../../src/ledger/repositories.js';
-import type { MDSpoolConfig } from '../../src/config/schema.js';
+import type { SpoolConfig } from '../../src/config/schema.js';
 import { OutboxRepository } from '../../src/ledger/outbox.js';
 import { FakeProvider } from '../../src/providers/fake.js';
 import { ProviderRegistry } from '../../src/providers/registry.js';
@@ -27,7 +27,7 @@ afterEach(() => {
 
 describe('durable provider evidence', () => {
   it('deduplicates event keys and preserves process, output, and workspace metadata', () => {
-    const state = mkdtempSync(path.join(tmpdir(), 'mdspool-events-'));
+    const state = mkdtempSync(path.join(tmpdir(), 'spool-events-'));
     const database = openLedgerDatabase(state);
     databases.push(database);
     const ledger = new LedgerRepository(database);
@@ -290,9 +290,9 @@ describe('reconciler restart boundaries', () => {
 function restartFixture(provider: string): {
   state: string;
   note: string;
-  config: MDSpoolConfig;
+  config: SpoolConfig;
 } {
-  const root = mkdtempSync(path.join(tmpdir(), 'mdspool-restart-runtime-'));
+  const root = mkdtempSync(path.join(tmpdir(), 'spool-restart-runtime-'));
   const state = path.join(root, 'state');
   const vault = path.join(root, 'vault');
   const clone = path.join(root, 'clone');
@@ -313,9 +313,9 @@ function restartFixture(provider: string): {
       '## Saturday',
       '',
       `- [ ] @${provider} Review https://github.com/example/widget/pull/1`,
-      '  ```mdspool',
+      '  ```spool',
       '  Task: background-handoff',
-      '  Anchor: mdspool-background-handoff',
+      '  Anchor: spool-background-handoff',
       '  ```',
       '',
     ].join('\n'),

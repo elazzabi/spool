@@ -5,7 +5,7 @@ import path from 'node:path';
 
 import { describe, expect, it, vi } from 'vitest';
 
-import type { MDSpoolConfig } from '../../src/config/schema.js';
+import type { SpoolConfig } from '../../src/config/schema.js';
 import { openLedgerDatabase } from '../../src/ledger/database.js';
 import { OutboxRepository } from '../../src/ledger/outbox.js';
 import { LedgerRepository } from '../../src/ledger/repositories.js';
@@ -20,7 +20,7 @@ import type { Reconciler, ReconciliationPassResult } from '../../src/scheduler/r
 
 describe('Markdown note scanner ownership barrier', () => {
   it('processes an arbitrarily titled Markdown note without touching a text sibling', async () => {
-    const vault = mkdtempSync(path.join(tmpdir(), 'mdspool-scanner-markdown-'));
+    const vault = mkdtempSync(path.join(tmpdir(), 'spool-scanner-markdown-'));
     const note = path.join(vault, 'Project Launch.md');
     const control = path.join(vault, 'Project Launch.txt');
     const controlSource = '## Saturday\n\n- [ ] @fake Leave this file alone\n';
@@ -46,7 +46,7 @@ describe('Markdown note scanner ownership barrier', () => {
   });
 
   it('recursively discovers Markdown notes with case-insensitive extensions', async () => {
-    const vault = mkdtempSync(path.join(tmpdir(), 'mdspool-scanner-nested-'));
+    const vault = mkdtempSync(path.join(tmpdir(), 'spool-scanner-nested-'));
     const projects = path.join(vault, 'Projects');
     const note = path.join(projects, 'Launch Notes.MD');
     mkdirSync(projects);
@@ -65,7 +65,7 @@ describe('Markdown note scanner ownership barrier', () => {
   });
 
   it('does not follow Markdown file or directory symlinks', async () => {
-    const root = mkdtempSync(path.join(tmpdir(), 'mdspool-scanner-symlink-'));
+    const root = mkdtempSync(path.join(tmpdir(), 'spool-scanner-symlink-'));
     const vault = path.join(root, 'vault');
     const external = path.join(root, 'external');
     mkdirSync(vault);
@@ -88,7 +88,7 @@ describe('Markdown note scanner ownership barrier', () => {
   });
 
   it('deduplicates canonical note paths below overlapping watched roots', async () => {
-    const vault = mkdtempSync(path.join(tmpdir(), 'mdspool-scanner-overlap-'));
+    const vault = mkdtempSync(path.join(tmpdir(), 'spool-scanner-overlap-'));
     const projects = path.join(vault, 'Projects');
     const note = path.join(projects, 'Project Launch.md');
     mkdirSync(projects);
@@ -109,7 +109,7 @@ describe('Markdown note scanner ownership barrier', () => {
   });
 
   it('keeps scanning sibling Markdown notes when a descendant cannot be read', async () => {
-    const vault = mkdtempSync(path.join(tmpdir(), 'mdspool-scanner-unreadable-'));
+    const vault = mkdtempSync(path.join(tmpdir(), 'spool-scanner-unreadable-'));
     const unavailable = path.join(vault, 'Unavailable');
     const note = path.join(vault, 'Project Launch.md');
     mkdirSync(unavailable);
@@ -145,7 +145,7 @@ describe('Markdown note scanner ownership barrier', () => {
   });
 
   it('bootstraps an unmarked directive and only exposes it after a later re-read', async () => {
-    const vault = mkdtempSync(path.join(tmpdir(), 'mdspool-scanner-'));
+    const vault = mkdtempSync(path.join(tmpdir(), 'spool-scanner-'));
     const note = path.join(vault, 'Week 29 of 2026.md');
     writeFileSync(note, '## Saturday\n\n- [ ] @fake Review this PR\n');
     const scanner = new MarkdownNoteScanner({
@@ -158,7 +158,7 @@ describe('Markdown note scanner ownership barrier', () => {
     expect(first.claimable).toEqual([]);
     expect(first.bootstrappedTaskIds).toEqual(['task-owned-in-this-process']);
     expect(readFileSync(note, 'utf8')).toContain('Task: task-owned-in-this-process');
-    expect(readFileSync(note, 'utf8')).toContain('Anchor: mdspool-task-owned-in-this-process');
+    expect(readFileSync(note, 'utf8')).toContain('Anchor: spool-task-owned-in-this-process');
 
     const second = await scanner.scan();
     expect(second.claimable).toHaveLength(1);
@@ -169,7 +169,7 @@ describe('Markdown note scanner ownership barrier', () => {
   });
 
   it('keeps a pre-existing marker with no ledger ownership inert after restart', async () => {
-    const vault = mkdtempSync(path.join(tmpdir(), 'mdspool-scanner-orphan-'));
+    const vault = mkdtempSync(path.join(tmpdir(), 'spool-scanner-orphan-'));
     const note = path.join(vault, 'Week 29 of 2026.md');
     writeFileSync(
       note,
@@ -177,9 +177,9 @@ describe('Markdown note scanner ownership barrier', () => {
         '## Saturday',
         '',
         '- [ ] @fake Never infer ownership',
-        '  ```mdspool',
+        '  ```spool',
         '  Task: orphan-task',
-        '  Anchor: mdspool-orphan-task',
+        '  Anchor: spool-orphan-task',
         '  ```',
         '',
       ].join('\n'),
@@ -198,7 +198,7 @@ describe('Markdown note scanner ownership barrier', () => {
   });
 
   it('bootstraps a trailing directive and strips the dispatch tag from agent context', async () => {
-    const vault = mkdtempSync(path.join(tmpdir(), 'mdspool-scanner-trailing-'));
+    const vault = mkdtempSync(path.join(tmpdir(), 'spool-scanner-trailing-'));
     const note = path.join(vault, 'Week 29 of 2026.md');
     writeFileSync(
       note,
@@ -230,7 +230,7 @@ describe('Markdown note scanner ownership barrier', () => {
 
 describe('note projection delivery', () => {
   it('persists a projection error and releases it for a later reconciliation pass', async () => {
-    const root = mkdtempSync(path.join(tmpdir(), 'mdspool-projector-error-'));
+    const root = mkdtempSync(path.join(tmpdir(), 'spool-projector-error-'));
     const vault = path.join(root, 'vault');
     const state = path.join(root, 'state');
     mkdirSync(vault);
@@ -276,7 +276,7 @@ describe('note projection delivery', () => {
   });
 
   it('defers a blocked rollover projection without stalling a later source receipt', async () => {
-    const root = mkdtempSync(path.join(tmpdir(), 'mdspool-projector-'));
+    const root = mkdtempSync(path.join(tmpdir(), 'spool-projector-'));
     const vault = path.join(root, 'vault');
     const state = path.join(root, 'state');
     const source = path.join(vault, 'Week 28 of 2026.md');
@@ -333,7 +333,7 @@ describe('note projection delivery', () => {
   });
 
   it('deduplicates full-name day aliases that refer to the same H2', async () => {
-    const root = mkdtempSync(path.join(tmpdir(), 'mdspool-projector-alias-'));
+    const root = mkdtempSync(path.join(tmpdir(), 'spool-projector-alias-'));
     const vault = path.join(root, 'vault');
     const state = path.join(root, 'state');
     const source = path.join(vault, 'Week 28 of 2026.md');
@@ -376,7 +376,7 @@ describe('note projection delivery', () => {
 
 describe('provider lifecycle projection', () => {
   it('retains two distinct needs-input episodes, resolves both, then completes once', async () => {
-    const root = mkdtempSync(path.join(tmpdir(), 'mdspool-lifecycle-'));
+    const root = mkdtempSync(path.join(tmpdir(), 'spool-lifecycle-'));
     const vault = path.join(root, 'vault');
     const state = path.join(root, 'state');
     mkdirSync(vault);
@@ -469,7 +469,7 @@ describe('provider lifecycle projection', () => {
   });
 
   it('keeps source history and routes rollover intervention/review actions to the current week', async () => {
-    const root = mkdtempSync(path.join(tmpdir(), 'mdspool-current-week-lifecycle-'));
+    const root = mkdtempSync(path.join(tmpdir(), 'spool-current-week-lifecycle-'));
     const vault = path.join(root, 'vault');
     const state = path.join(root, 'state');
     mkdirSync(vault);
@@ -545,7 +545,7 @@ describe('provider lifecycle projection', () => {
   });
 
   it('routes a nested source named like the current week by full path identity', async () => {
-    const root = mkdtempSync(path.join(tmpdir(), 'mdspool-nested-current-name-'));
+    const root = mkdtempSync(path.join(tmpdir(), 'spool-nested-current-name-'));
     const vault = path.join(root, 'vault');
     const archive = path.join(vault, 'Archive');
     const state = path.join(root, 'state');
@@ -595,7 +595,7 @@ describe('provider lifecycle projection', () => {
   });
 
   it('uses the deepest overlapping watched root for the current-week destination', async () => {
-    const root = mkdtempSync(path.join(tmpdir(), 'mdspool-deepest-vault-'));
+    const root = mkdtempSync(path.join(tmpdir(), 'spool-deepest-vault-'));
     const vault = path.join(root, 'vault');
     const projects = path.join(vault, 'Projects');
     const notes = path.join(projects, 'Notes');
@@ -642,7 +642,7 @@ describe('provider lifecycle projection', () => {
 
 describe('watcher alarms', () => {
   it('coalesces chunked saves into a wakeup while periodic reconciliation remains independent', async () => {
-    const vault = mkdtempSync(path.join(tmpdir(), 'mdspool-watcher-'));
+    const vault = mkdtempSync(path.join(tmpdir(), 'spool-watcher-'));
     const note = path.join(vault, 'Week 29 of 2026.md');
     writeFileSync(note, '## Saturday\n');
     let wakes = 0;
@@ -716,15 +716,15 @@ function trackedTask(taskId: string): string {
     '## Saturday',
     '',
     '- [ ] @fake Review',
-    '  ```mdspool',
+    '  ```spool',
     `  Task: ${taskId}`,
-    `  Anchor: mdspool-${taskId}`,
+    `  Anchor: spool-${taskId}`,
     '  ```',
     '',
   ].join('\n');
 }
 
-function projectorConfig(root: string, vault: string, state: string): MDSpoolConfig {
+function projectorConfig(root: string, vault: string, state: string): SpoolConfig {
   return {
     configPath: path.join(root, 'config.yaml'),
     vaults: [vault],

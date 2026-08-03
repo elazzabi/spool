@@ -114,7 +114,7 @@ describe('ClackSetupPrompter', () => {
       { value: 'codex', label: 'Co\u001bdex', hint: 'Re\u0007ady' },
     ];
 
-    prompter.intro('MD\u001bSpool');
+    prompter.intro('sp\u001bool');
     prompter.note('Found\u0007 one\nCodex ready', 'Sta\u001btus');
     await prompter.text('Fol\u0007der', '/tmp/\u001bnotes');
     await prompter.select('Age\u001bnt', unsafeOptions);
@@ -122,7 +122,7 @@ describe('ClackSetupPrompter', () => {
     await prompter.confirm('Cre\u001bate?', true);
     prompter.outro('Do\u0007ne\nNext step');
 
-    expect(bindings.intro).toHaveBeenCalledWith('MDSpool', expect.anything());
+    expect(bindings.intro).toHaveBeenCalledWith('spool', expect.anything());
     expect(bindings.note).toHaveBeenCalledWith(
       'Found one\nCodex ready',
       'Status',
@@ -204,7 +204,7 @@ describe('PlainSetupPrompter', () => {
     const output = new PassThrough();
     const prompter = new PlainSetupPrompter({ input, output });
 
-    prompter.intro('MDSpool setup');
+    prompter.intro('spool setup');
     prompter.note('Detected agents', 'Status');
     await expect(prompter.text('Folder', '/default')).resolves.toBe('/notes');
     await expect(prompter.select('Primary', providerOptions, 'codex')).resolves.toBe('cursor');
@@ -216,7 +216,7 @@ describe('PlainSetupPrompter', () => {
     prompter.close();
 
     const rendered = outputText(output);
-    expect(rendered).toContain('MDSpool setup');
+    expect(rendered).toContain('spool setup');
     expect(rendered).toContain('Status: Detected agents');
     expect(rendered).toContain('2) Claude — Not found (unavailable)');
     expect(rendered).toContain('Choose numbers separated by commas [1,3]');

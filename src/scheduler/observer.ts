@@ -3,7 +3,7 @@ import path from 'node:path';
 
 import { spoolArgv } from '../cli/output.js';
 import { deepestContainingDirectory, samePath } from '../config/paths.js';
-import type { MDSpoolConfig } from '../config/schema.js';
+import type { SpoolConfig } from '../config/schema.js';
 import {
   isTerminalJobState,
   type Attempt,
@@ -28,7 +28,7 @@ import type { NoteProjector } from './projector.js';
 type ObserverOperationalLog = Pick<OperationalLogStore, 'providerTerminal'>;
 
 export class AttemptObserver {
-  readonly #config: MDSpoolConfig;
+  readonly #config: SpoolConfig;
   readonly #ledger: LedgerRepository;
   readonly #projector: NoteProjector;
   readonly #now: () => Date;
@@ -36,7 +36,7 @@ export class AttemptObserver {
   readonly #terminalAttempts = new Set<string>();
 
   constructor(options: {
-    config: MDSpoolConfig;
+    config: SpoolConfig;
     ledger: LedgerRepository;
     projector: NoteProjector;
     operationalLog?: ObserverOperationalLog;
@@ -129,7 +129,7 @@ export class AttemptObserver {
         job.id,
         adapter,
         `uncertain:${attempt.attemptNumber}`,
-        result.diagnostics.join('; ') || 'Provider state is uncertain; MDSpool will not relaunch.',
+        result.diagnostics.join('; ') || 'Provider state is uncertain; spool will not relaunch.',
       );
       return;
     }

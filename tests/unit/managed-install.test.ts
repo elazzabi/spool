@@ -46,16 +46,13 @@ describe('managed release installation', () => {
     });
 
     expect(result).toMatchObject({ status: 'installed', exitCode: 0, version: '1.2.3' });
-    expect(readlinkSync(path.join(fixture.prefix, 'lib/mdspool/current'))).toBe('versions/1.2.3');
+    expect(readlinkSync(path.join(fixture.prefix, 'lib/spool/current'))).toBe('versions/1.2.3');
     expect(readlinkSync(path.join(fixture.prefix, 'bin/spool'))).toBe(
-      '../lib/mdspool/current/bin/spool',
-    );
-    expect(readlinkSync(path.join(fixture.prefix, 'bin/mdspool'))).toBe(
-      '../lib/mdspool/current/bin/mdspool',
+      '../lib/spool/current/bin/spool',
     );
     expect(
       JSON.parse(
-        readFileSync(path.join(fixture.prefix, 'lib/mdspool', MANAGED_INSTALL_FILENAME), 'utf8'),
+        readFileSync(path.join(fixture.prefix, 'lib/spool', MANAGED_INSTALL_FILENAME), 'utf8'),
       ),
     ).toEqual({
       schemaVersion: 1,
@@ -71,30 +68,25 @@ describe('managed release installation', () => {
     expect(userDataSnapshot(fixture.userData)).toEqual(before);
   });
 
-  it.each(['spool', 'mdspool'])(
-    'refuses an occupied %s target with exit 2 and no changes',
-    async (alias) => {
-      const fixture = installFixture('1.2.3');
-      const aliasPath = path.join(fixture.prefix, 'bin', alias);
-      mkdirSync(path.dirname(aliasPath), { recursive: true });
-      writeFileSync(aliasPath, 'unrelated\n');
+  it.each(['spool'])('refuses an occupied %s target with exit 2 and no changes', async (alias) => {
+    const fixture = installFixture('1.2.3');
+    const aliasPath = path.join(fixture.prefix, 'bin', alias);
+    mkdirSync(path.dirname(aliasPath), { recursive: true });
+    writeFileSync(aliasPath, 'unrelated\n');
 
-      await expect(
-        installManagedRelease(fixture.request, testDependencies()),
-      ).rejects.toMatchObject({
-        code: 'occupied-alias',
-        exitCode: 2,
-      });
-      expect(readFileSync(aliasPath, 'utf8')).toBe('unrelated\n');
-      expect(existsSync(path.join(fixture.prefix, 'lib/mdspool/current'))).toBe(false);
-    },
-  );
+    await expect(installManagedRelease(fixture.request, testDependencies())).rejects.toMatchObject({
+      code: 'occupied-alias',
+      exitCode: 2,
+    });
+    expect(readFileSync(aliasPath, 'utf8')).toBe('unrelated\n');
+    expect(existsSync(path.join(fixture.prefix, 'lib/spool/current'))).toBe(false);
+  });
 
-  it('returns attention after installing when an earlier executable shadows both aliases', async () => {
+  it('returns attention after installing when an earlier executable shadows the command', async () => {
     const fixture = installFixture('1.2.3');
     const shadowBin = path.join(fixture.root, 'shadow-bin');
     mkdirSync(shadowBin);
-    for (const alias of ['spool', 'mdspool']) {
+    for (const alias of ['spool']) {
       const executable = path.join(shadowBin, alias);
       writeFileSync(executable, '#!/bin/sh\nexit 0\n');
       chmodSync(executable, 0o755);
@@ -110,14 +102,14 @@ describe('managed release installation', () => {
     expect(result.message).toContain(
       `export PATH="${path.join(realpathSync(fixture.prefix), 'bin')}:$PATH"`,
     );
-    expect(readlinkSync(path.join(fixture.prefix, 'lib/mdspool/current'))).toBe('versions/1.2.3');
+    expect(readlinkSync(path.join(fixture.prefix, 'lib/spool/current'))).toBe('versions/1.2.3');
   });
 
   it('treats an intact reinstall as a no-op', async () => {
     const fixture = installFixture('1.2.3');
     const dependencies = testDependencies();
     await installManagedRelease(fixture.request, dependencies);
-    const ownershipPath = path.join(fixture.prefix, 'lib/mdspool', MANAGED_INSTALL_FILENAME);
+    const ownershipPath = path.join(fixture.prefix, 'lib/spool', MANAGED_INSTALL_FILENAME);
     const before = readFileSync(ownershipPath);
     const smoke = vi.fn();
 
@@ -135,7 +127,7 @@ describe('managed release installation', () => {
     const fixture = installFixture('1.2.3');
     const dependencies = testDependencies();
     await installManagedRelease(fixture.request, dependencies);
-    rmSync(path.join(fixture.prefix, 'lib/mdspool/versions/1.2.3'), {
+    rmSync(path.join(fixture.prefix, 'lib/spool/versions/1.2.3'), {
       recursive: true,
       force: true,
     });
@@ -149,7 +141,7 @@ describe('managed release installation', () => {
     const fixture = installFixture('1.2.3');
     const dependencies = testDependencies();
     await installManagedRelease(fixture.request, dependencies);
-    chmodSync(path.join(fixture.prefix, 'lib/mdspool/versions/1.2.3/bin/spool'), 0o644);
+    chmodSync(path.join(fixture.prefix, 'lib/spool/versions/1.2.3/bin/spool'), 0o644);
 
     await expect(installManagedRelease(fixture.request, dependencies)).rejects.toMatchObject({
       code: 'damaged-install',
@@ -194,7 +186,7 @@ describe('managed release installation', () => {
     );
   });
 
-  it('cleans a failed clean install before publishing any aliases', async () => {
+  it('cleans a failed clean install before publishing the executable', async () => {
     const fixture = installFixture('1.2.3');
 
     await expect(
@@ -206,14 +198,13 @@ describe('managed release installation', () => {
       }),
     ).rejects.toThrow(/smoke failure/i);
     expect(existsSync(path.join(fixture.prefix, 'bin/spool'))).toBe(false);
-    expect(existsSync(path.join(fixture.prefix, 'bin/mdspool'))).toBe(false);
-    expect(existsSync(path.join(fixture.prefix, 'lib/mdspool/current'))).toBe(false);
-    expect(existsSync(path.join(fixture.prefix, 'lib/mdspool/versions/1.2.3'))).toBe(false);
+    expect(existsSync(path.join(fixture.prefix, 'lib/spool/current'))).toBe(false);
+    expect(existsSync(path.join(fixture.prefix, 'lib/spool/versions/1.2.3'))).toBe(false);
   });
 
   it('rejects a candidate whose CLI reports the wrong version before staging', async () => {
     const fixture = installFixture('1.2.3');
-    for (const alias of ['spool', 'mdspool']) {
+    for (const alias of ['spool']) {
       const launcher = path.join(fixture.candidate, 'bin', alias);
       writeFileSync(launcher, "#!/bin/sh\nprintf '%s\\n' '9.9.9'\n");
       chmodSync(launcher, 0o755);
@@ -227,9 +218,9 @@ describe('managed release installation', () => {
         rename,
         runtimeIdentity: releaseRuntimeIdentity(),
       }),
-    ).rejects.toThrow(/did not report MDSpool 1\.2\.3/i);
+    ).rejects.toThrow(/did not report spool 1\.2\.3/i);
     expect(rename).not.toHaveBeenCalled();
-    expect(existsSync(path.join(fixture.prefix, 'lib/mdspool'))).toBe(false);
+    expect(existsSync(path.join(fixture.prefix, 'lib/spool'))).toBe(false);
   });
 
   it('restores the previous version when post-activation verification fails', async () => {
@@ -253,19 +244,19 @@ describe('managed release installation', () => {
       }),
     ).rejects.toThrow(/post-activation failure/i);
 
-    expect(readlinkSync(path.join(first.prefix, 'lib/mdspool/current'))).toBe('versions/1.2.3');
+    expect(readlinkSync(path.join(first.prefix, 'lib/spool/current'))).toBe('versions/1.2.3');
     const ownership = JSON.parse(
-      readFileSync(path.join(first.prefix, 'lib/mdspool', MANAGED_INSTALL_FILENAME), 'utf8'),
+      readFileSync(path.join(first.prefix, 'lib/spool', MANAGED_INSTALL_FILENAME), 'utf8'),
     ) as { version: string };
     expect(ownership.version).toBe('1.2.3');
-    expect(existsSync(path.join(first.prefix, 'lib/mdspool/versions/1.3.0'))).toBe(false);
+    expect(existsSync(path.join(first.prefix, 'lib/spool/versions/1.3.0'))).toBe(false);
   });
 
   it('continues rollback cleanup after one cleanup operation fails', async () => {
     const first = installFixture('1.2.3');
     await installManagedRelease(first.request, testDependencies());
     const secondCandidate = createCandidate(first.root, '1.3.0');
-    const currentPath = path.join(first.prefix, 'lib/mdspool/current');
+    const currentPath = path.join(first.prefix, 'lib/spool/current');
     let injected = false;
     const remove: typeof rmSync = (target, options) => {
       if (!injected && String(target) === currentPath) {
@@ -292,7 +283,7 @@ describe('managed release installation', () => {
     await expect(installation).rejects.toMatchObject({ code: 'rolled-back' });
     await expect(installation).rejects.toThrow('fixture activation failure');
     expect(readlinkSync(currentPath)).toBe('versions/1.2.3');
-    expect(existsSync(path.join(first.prefix, 'lib/mdspool/versions/1.3.0'))).toBe(false);
+    expect(existsSync(path.join(first.prefix, 'lib/spool/versions/1.3.0'))).toBe(false);
   });
 
   it('rejects downgrades and an active daemon before activation', async () => {
@@ -316,7 +307,7 @@ describe('managed release installation', () => {
         },
       }),
     ).rejects.toThrow(/kill 4242/i);
-    expect(existsSync(path.join(fresh.prefix, 'lib/mdspool/current'))).toBe(false);
+    expect(existsSync(path.join(fresh.prefix, 'lib/spool/current'))).toBe(false);
   });
 
   it('detects the effective configured daemon lock with a copyable recovery command', async () => {
@@ -342,7 +333,7 @@ describe('managed release installation', () => {
         runtimeIdentity: releaseRuntimeIdentity(),
       }),
     ).rejects.toThrow(new RegExp(`kill ${String(process.pid)}`));
-    expect(existsSync(path.join(fixture.prefix, 'lib/mdspool/current'))).toBe(false);
+    expect(existsSync(path.join(fixture.prefix, 'lib/spool/current'))).toBe(false);
     lock.release(owner);
     database.close();
   });
@@ -375,7 +366,7 @@ describe('managed release installation', () => {
         runtimeIdentity: releaseRuntimeIdentity(),
       }),
     ).rejects.toBeInstanceOf(DaemonActiveInstallError);
-    expect(existsSync(path.join(fixture.prefix, 'lib/mdspool/current'))).toBe(false);
+    expect(existsSync(path.join(fixture.prefix, 'lib/spool/current'))).toBe(false);
     lock.release(owner);
     database.close();
   });
@@ -385,7 +376,7 @@ describe('managed release installation', () => {
     const state = path.join(fixture.root, 'state');
     const database = openLedgerDatabase(state);
     database.close();
-    const ledgerPath = path.join(state, 'mdspool.sqlite');
+    const ledgerPath = path.join(state, 'spool.sqlite');
     const before = readFileSync(ledgerPath);
     writeFileSync(fixture.request.configPath, `stateDirectory: ${JSON.stringify(state)}\n`);
 
@@ -399,7 +390,7 @@ describe('managed release installation', () => {
     expect(readFileSync(ledgerPath)).toEqual(before);
   });
 
-  it('uninstalls only owned program files and aliases', async () => {
+  it('uninstalls only owned program files and the managed executable', async () => {
     const fixture = installFixture('1.2.3');
     const dependencies = testDependencies();
     await installManagedRelease(fixture.request, dependencies);
@@ -414,8 +405,7 @@ describe('managed release installation', () => {
 
     expect(result).toMatchObject({ status: 'uninstalled', exitCode: 0 });
     expect(existsSync(path.join(fixture.prefix, 'bin/spool'))).toBe(false);
-    expect(existsSync(path.join(fixture.prefix, 'bin/mdspool'))).toBe(false);
-    expect(existsSync(path.join(fixture.prefix, 'lib/mdspool'))).toBe(false);
+    expect(existsSync(path.join(fixture.prefix, 'lib/spool'))).toBe(false);
     expect(readFileSync(unrelated, 'utf8')).toBe('preserve\n');
     expect(userDataSnapshot(fixture.userData)).toEqual(before);
   });
@@ -451,18 +441,18 @@ describe('managed release installation', () => {
         }),
       ).rejects.toMatchObject({ code: 'invalid-candidate' });
       expect(withDaemonLock).not.toHaveBeenCalled();
-      expect(existsSync(path.join(fixture.prefix, 'lib/mdspool'))).toBe(false);
+      expect(existsSync(path.join(fixture.prefix, 'lib/spool'))).toBe(false);
     },
   );
 });
 
 function installFixture(version: string) {
-  const root = mkdtempSync(path.join(tmpdir(), 'mdspool-managed-install-'));
+  const root = mkdtempSync(path.join(tmpdir(), 'spool-managed-install-'));
   const prefix = path.join(root, 'prefix');
   const userData = path.join(root, 'user-data');
   mkdirSync(userData);
   writeFileSync(path.join(userData, 'config.yaml'), 'preserve config\n');
-  writeFileSync(path.join(userData, 'mdspool.sqlite'), 'preserve ledger\n');
+  writeFileSync(path.join(userData, 'spool.sqlite'), 'preserve ledger\n');
   writeFileSync(path.join(userData, 'log.jsonl'), 'preserve logs\n');
   writeFileSync(path.join(userData, 'Week.md'), '# Preserve note\n');
   const candidate = createCandidate(root, version);
@@ -490,7 +480,7 @@ function createCandidate(root: string, version: string): string {
   mkdirSync(path.join(candidate, 'dist/cli'), { recursive: true });
   writeFileSync(
     path.join(candidate, 'package.json'),
-    `${JSON.stringify({ name: 'mdspool', version, type: 'module' })}\n`,
+    `${JSON.stringify({ name: 'spool', version, type: 'module' })}\n`,
   );
   writeFileSync(
     path.join(candidate, 'release-runtime.json'),
@@ -504,7 +494,7 @@ function createCandidate(root: string, version: string): string {
   );
   writeFileSync(path.join(candidate, 'dist/cli/index.js'), '#!/usr/bin/env node\n');
   chmodSync(path.join(candidate, 'dist/cli/index.js'), 0o755);
-  for (const alias of ['spool', 'mdspool']) {
+  for (const alias of ['spool']) {
     const launcher = path.join(candidate, 'bin', alias);
     writeFileSync(launcher, `#!/bin/sh\nprintf '%s\\n' '${version}'\n`);
     chmodSync(launcher, 0o755);
@@ -533,7 +523,7 @@ function releaseRuntimeIdentity() {
 
 function userDataSnapshot(directory: string): Record<string, string> {
   return Object.fromEntries(
-    ['config.yaml', 'mdspool.sqlite', 'log.jsonl', 'Week.md'].map((filename) => [
+    ['config.yaml', 'spool.sqlite', 'log.jsonl', 'Week.md'].map((filename) => [
       filename,
       readFileSync(path.join(directory, filename), 'utf8'),
     ]),

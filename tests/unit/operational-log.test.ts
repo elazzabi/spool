@@ -542,7 +542,7 @@ describe('operational log reader', () => {
 });
 
 function fixtureState(): string {
-  const root = realpathSync(mkdtempSync(path.join(realpathSync(tmpdir()), 'mdspool-operational-')));
+  const root = realpathSync(mkdtempSync(path.join(realpathSync(tmpdir()), 'spool-operational-')));
   chmodSync(root, 0o700);
   roots.push(root);
   return root;

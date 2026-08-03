@@ -11,7 +11,7 @@ import {
 } from '../../src/providers/pi-session.js';
 
 function fixture() {
-  const root = mkdtempSync(path.join(tmpdir(), 'mdspool-pi-session-'));
+  const root = mkdtempSync(path.join(tmpdir(), 'spool-pi-session-'));
   const stateDirectory = path.join(root, 'state');
   const workspace = path.join(root, 'workspace');
   mkdirSync(stateDirectory, { mode: 0o700 });

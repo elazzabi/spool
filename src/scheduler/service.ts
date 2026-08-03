@@ -1,7 +1,7 @@
 import { execFile } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 
-import type { MDSpoolConfig, ProviderConfig } from '../config/schema.js';
+import type { SpoolConfig, ProviderConfig } from '../config/schema.js';
 import { openLedgerDatabase, type LedgerDatabase } from '../ledger/database.js';
 import { OutboxRepository } from '../ledger/outbox.js';
 import { LedgerRepository } from '../ledger/repositories.js';
@@ -28,7 +28,7 @@ import { WorkspacePool } from '../workspaces/pool.js';
 import { Reconciler, type ReconciliationPassResult } from './reconciler.js';
 import { VaultWatcher } from './watcher.js';
 
-export interface MDSpoolRuntime {
+export interface SpoolRuntime {
   database: LedgerDatabase;
   ledger: LedgerRepository;
   outbox: OutboxRepository;
@@ -39,15 +39,15 @@ export interface MDSpoolRuntime {
   close(outcome?: 'clean' | 'failed'): Promise<void>;
 }
 
-export async function openMDSpoolRuntime(
-  config: MDSpoolConfig,
+export async function openSpoolRuntime(
+  config: SpoolConfig,
   options: {
     providers?: ProviderRegistry;
     mode?: OperationalRuntimeMode;
     onOperationalLogWarning?: (warning: string) => void;
     now?: () => Date;
   } = {},
-): Promise<MDSpoolRuntime> {
+): Promise<SpoolRuntime> {
   const database = openLedgerDatabase(config.stateDirectory);
   try {
     const ledger = new LedgerRepository(database);
@@ -111,7 +111,7 @@ export async function openMDSpoolRuntime(
 }
 
 export class ReconciliationService {
-  readonly #config: MDSpoolConfig;
+  readonly #config: SpoolConfig;
   readonly #reconciler: Reconciler;
   readonly #watcher: VaultWatcher;
   readonly #onDiagnostic: (message: string) => void;
@@ -123,7 +123,7 @@ export class ReconciliationService {
   #lastError: Error | null = null;
 
   constructor(options: {
-    config: MDSpoolConfig;
+    config: SpoolConfig;
     reconciler: Reconciler;
     watcher?: VaultWatcher;
     onDiagnostic?: (message: string) => void;
@@ -211,7 +211,7 @@ export async function runUntilConverged(
   return results;
 }
 
-export async function createInstalledProviderRegistry(config: MDSpoolConfig): Promise<{
+export async function createInstalledProviderRegistry(config: SpoolConfig): Promise<{
   registry: ProviderRegistry;
   warnings: string[];
 }> {

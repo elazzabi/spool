@@ -67,7 +67,7 @@ export async function runManagedUpdate(
     return result(
       'unavailable',
       1,
-      `Could not acquire the requested stable release; Expected an exact stable version: ${options.version}. MDSpool ${ownership.version} remains active.`,
+      `Could not acquire the requested stable release; Expected an exact stable version: ${options.version}. spool ${ownership.version} remains active.`,
       ownership.version,
     );
   }
@@ -77,7 +77,7 @@ export async function runManagedUpdate(
       return result(
         'downgrade-refused',
         1,
-        `Refusing to downgrade managed MDSpool from ${ownership.version} to ${options.version}.`,
+        `Refusing to downgrade managed spool from ${ownership.version} to ${options.version}.`,
         ownership.version,
       );
     }
@@ -85,7 +85,7 @@ export async function runManagedUpdate(
       return result(
         'current',
         0,
-        `Managed MDSpool ${ownership.version} is already current.`,
+        `Managed spool ${ownership.version} is already current.`,
         ownership.version,
       );
     }
@@ -95,7 +95,7 @@ export async function runManagedUpdate(
   try {
     const releaseBaseUrl =
       dependencies.releaseBaseUrl ??
-      process.env.MDSPOOL_RELEASE_BASE_URL ??
+      process.env.SPOOL_RELEASE_BASE_URL ??
       deriveReleaseBaseUrl(ownership.releaseSource);
     acquired = await (dependencies.acquire ?? acquireRelease)({
       releaseBaseUrl,
@@ -105,7 +105,7 @@ export async function runManagedUpdate(
     return result(
       'unavailable',
       1,
-      `Could not acquire the requested stable release; ${messageOf(error)}. MDSpool ${ownership.version} remains active.`,
+      `Could not acquire the requested stable release; ${messageOf(error)}. spool ${ownership.version} remains active.`,
       ownership.version,
     );
   }
@@ -115,7 +115,7 @@ export async function runManagedUpdate(
     return result(
       'downgrade-refused',
       1,
-      `Refusing to downgrade managed MDSpool from ${ownership.version} to ${acquired.version}.`,
+      `Refusing to downgrade managed spool from ${ownership.version} to ${acquired.version}.`,
       ownership.version,
     );
   }
@@ -147,7 +147,7 @@ export async function runManagedUpdate(
     return result(
       'failed-preserved',
       1,
-      `Update failed before activation; MDSpool ${ownership.version} remains active: ${messageOf(error)}`,
+      `Update failed before activation; spool ${ownership.version} remains active: ${messageOf(error)}`,
       ownership.version,
     );
   } finally {
@@ -179,7 +179,7 @@ function unmanagedResult(): UpdateResult {
   return result(
     'unmanaged',
     1,
-    'This MDSpool executable is not owned by the GitHub installer. Install it with install.sh before using managed updates.',
+    'This spool executable is not owned by the GitHub installer. Install it with install.sh before using managed updates.',
   );
 }
 

@@ -141,7 +141,7 @@ describe('provider contract', () => {
   });
 
   it('replays logs sanitized by default and requires an explicit unsafe raw mode', () => {
-    const root = mkdtempSync(path.join(tmpdir(), 'mdspool-log-replay-'));
+    const root = mkdtempSync(path.join(tmpdir(), 'spool-log-replay-'));
     const logPath = path.join(root, 'attempt.log');
     closeSync(openSync(logPath, 'wx', 0o600));
     writeFileSync(logPath, Buffer.from('safe\u001b[31mred\u001b[0m'));

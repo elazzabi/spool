@@ -156,7 +156,7 @@ async function durableReplace(
 ): Promise<void> {
   const temporaryPath = join(
     target.parentPath,
-    `.${basename(target.canonicalPath)}.mdspool-${process.pid}-${randomUUID()}.tmp`,
+    `.${basename(target.canonicalPath)}.spool-${process.pid}-${randomUUID()}.tmp`,
   );
   let temporaryCreated = false;
   try {
@@ -479,7 +479,7 @@ export async function projectCurrentWeekFollowUp(
       return {
         changed: false,
         blocked: true,
-        reason: 'Current weekly note does not exist; MDSpool will not create it.',
+        reason: 'Current weekly note does not exist; spool will not create it.',
         sourceHash: '',
       };
     }

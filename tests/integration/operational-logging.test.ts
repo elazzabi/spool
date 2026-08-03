@@ -13,13 +13,13 @@ import path from 'node:path';
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import type { MDSpoolConfig } from '../../src/config/schema.js';
+import type { SpoolConfig } from '../../src/config/schema.js';
 import { parseOperationalEvent, type OperationalEvent } from '../../src/logging/events.js';
 import { OPERATIONAL_ACTIVE_FILE, OPERATIONAL_LOG_DIRECTORY } from '../../src/logging/store.js';
 import { FakeProvider } from '../../src/providers/fake.js';
 import { ProviderRegistry } from '../../src/providers/registry.js';
 import { MarkdownNoteScanner } from '../../src/scheduler/scanner.js';
-import { openMDSpoolRuntime, runUntilConverged } from '../../src/scheduler/service.js';
+import { openSpoolRuntime, runUntilConverged } from '../../src/scheduler/service.js';
 
 const roots: string[] = [];
 
@@ -36,7 +36,7 @@ describe('owned runtime operational logging', () => {
       `## Saturday\n\n- [ ] Review ${noteCanary} https://github.com/example/widget/pull/1 @fake\n`,
     );
     const providers = new ProviderRegistry([new FakeProvider({ executable: process.execPath })]);
-    const runtime = await openMDSpoolRuntime(fixture.config, {
+    const runtime = await openSpoolRuntime(fixture.config, {
       providers,
       mode: 'run-once',
     });
@@ -76,7 +76,7 @@ describe('owned runtime operational logging', () => {
       expect(encoded).not.toContain(forbidden);
     }
 
-    const daemonRuntime = await openMDSpoolRuntime(fixture.config, {
+    const daemonRuntime = await openSpoolRuntime(fixture.config, {
       providers,
       mode: 'daemon',
     });
@@ -93,13 +93,13 @@ describe('owned runtime operational logging', () => {
   it('does not activate or mutate operational history when ownership acquisition fails', async () => {
     const fixture = runtimeFixture();
     const providers = new ProviderRegistry([]);
-    const owner = await openMDSpoolRuntime(fixture.config, { providers, mode: 'daemon' });
+    const owner = await openSpoolRuntime(fixture.config, { providers, mode: 'daemon' });
     await owner.reconciler.runPass();
     await vi.waitFor(() =>
       expect(operationalText(fixture.state)).toContain('reconciliation.completed'),
     );
     const before = operationalText(fixture.state);
-    const contender = await openMDSpoolRuntime(fixture.config, { providers, mode: 'run-once' });
+    const contender = await openSpoolRuntime(fixture.config, { providers, mode: 'run-once' });
 
     await expect(contender.reconciler.runPass()).rejects.toThrow(/daemon owns/i);
     await contender.close('failed');
@@ -111,7 +111,7 @@ describe('owned runtime operational logging', () => {
   it('coalesces repeated quiet passes until the hourly heartbeat is due', async () => {
     const fixture = runtimeFixture();
     let now = Date.parse('2026-07-20T00:00:00.000Z');
-    const runtime = await openMDSpoolRuntime(fixture.config, {
+    const runtime = await openSpoolRuntime(fixture.config, {
       providers: new ProviderRegistry([]),
       mode: 'daemon',
       now: () => new Date(now),
@@ -145,7 +145,7 @@ describe('owned runtime operational logging', () => {
     const scan = vi
       .spyOn(MarkdownNoteScanner.prototype, 'scan')
       .mockRejectedValueOnce(new Error(pathCanary));
-    const runtime = await openMDSpoolRuntime(fixture.config, { providers, mode: 'run-once' });
+    const runtime = await openSpoolRuntime(fixture.config, { providers, mode: 'run-once' });
 
     await expect(runtime.reconciler.runPass()).rejects.toThrow();
     scan.mockRestore();
@@ -171,9 +171,9 @@ function runtimeFixture(): {
   vault: string;
   state: string;
   clone: string;
-  config: MDSpoolConfig;
+  config: SpoolConfig;
 } {
-  const root = realpathSync(mkdtempSync(path.join(realpathSync(tmpdir()), 'mdspool-operational-')));
+  const root = realpathSync(mkdtempSync(path.join(realpathSync(tmpdir()), 'spool-operational-')));
   roots.push(root);
   const vault = path.join(root, 'vault');
   const state = path.join(root, 'state');
@@ -194,7 +194,7 @@ function runtimeFixture(): {
     state,
     clone,
     config: {
-      configPath: path.join(root, 'mdspool.config.yaml'),
+      configPath: path.join(root, 'spool.config.yaml'),
       vaults: [vault],
       stateDirectory: state,
       timeZone: 'Europe/Istanbul',

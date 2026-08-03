@@ -54,7 +54,7 @@ export interface RepositoryConfig {
   clones: string[];
 }
 
-export interface MDSpoolConfig {
+export interface SpoolConfig {
   configPath: string;
   vaults: string[];
   stateDirectory: string;

@@ -3,7 +3,7 @@
 # authoring it yourself, then replace the example vault, state, and clone paths.
 vaults:
   - /Users/you/Documents/Obsidian
-stateDirectory: /Users/you/.local/state/mdspool
+stateDirectory: /Users/you/.local/state/spool
 timeZone: Europe/Istanbul
 pollIntervalSeconds: 30
 
@@ -21,7 +21,7 @@ dayAliases:
 providers:
   # defaultArgs are literal argv entries. Keep a flag and its value as separate
   # array items. They also apply to inspect/resume commands. `spool init` rejects
-  # credentials, warned bypass aliases, and MDSpool-owned lifecycle arguments;
+  # credentials, warned bypass aliases, and spool-owned lifecycle arguments;
   # manual YAML does not, so never place credentials here. Restart the daemon
   # after changing provider arguments.
   claude:
@@ -31,7 +31,7 @@ providers:
     # Recommended: proposal-only plan mode. The warned unrestricted onboarding
     # choice replaces this array with ['--dangerously-skip-permissions'].
     # Other Claude permission modes can be configured deliberately as literal
-    # entries; MDSpool appends its print, stream, verbose, and resume arguments.
+    # entries; spool appends its print, stream, verbose, and resume arguments.
     defaultArgs: ['--permission-mode', 'plan']
   codex:
     enabled: true
@@ -40,7 +40,7 @@ providers:
     # Recommended: read-only sandbox. The warned unrestricted onboarding choice
     # replaces this with ['--dangerously-bypass-approvals-and-sandbox'], which
     # disables approvals and sandboxing. Codex also exposes separate approval
-    # and sandbox controls; MDSpool owns exec, JSON, stdin, and resume arguments.
+    # and sandbox controls; spool owns exec, JSON, stdin, and resume arguments.
     defaultArgs: ['--sandbox', 'read-only']
   cursor:
     enabled: true
@@ -48,11 +48,11 @@ providers:
     directive: '@cursor'
     # Recommended: proposal-only plan mode. The warned direct-change choice is
     # ['--force']; onboarding does not accept its --yolo alias as a custom flag.
-    # MDSpool appends print, stream, workspace, and resume arguments.
+    # spool appends print, stream, workspace, and resume arguments.
     defaultArgs: ['--mode', 'plan']
   # Pi is limited to file-review tools, but this is not path containment: its
   # read tools can access any file readable by the current OS user. Pi has no
-  # built-in permission prompt or unrestricted profile. MDSpool appends these
+  # built-in permission prompt or unrestricted profile. spool appends these
   # restrictions again with managed session/JSON arguments, so custom-only
   # onboarding cannot weaken them. Use external containment when required.
   pi:

@@ -1,9 +1,9 @@
-import type { MDSpoolConfig } from '../../config/schema.js';
+import type { SpoolConfig } from '../../config/schema.js';
 import { sanitizeOperatorText } from '../../providers/logs.js';
-import { openMDSpoolRuntime, ReconciliationService } from '../../scheduler/service.js';
+import { openSpoolRuntime, ReconciliationService } from '../../scheduler/service.js';
 
-export async function runDaemon(config: MDSpoolConfig): Promise<void> {
-  const runtime = await openMDSpoolRuntime(config, {
+export async function runDaemon(config: SpoolConfig): Promise<void> {
+  const runtime = await openSpoolRuntime(config, {
     mode: 'daemon',
     onOperationalLogWarning: (warning) =>
       process.stderr.write(`Warning: ${sanitizeOperatorText(warning)}\n`),

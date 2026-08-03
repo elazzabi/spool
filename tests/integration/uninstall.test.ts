@@ -16,17 +16,17 @@ describe('managed uninstall command', () => {
     const result = await runManagedUninstall(
       {},
       {
-        entrypointPath: path.join(fixture.prefix, 'lib/mdspool/current/dist/cli/index.js'),
+        entrypointPath: path.join(fixture.prefix, 'lib/spool/current/dist/cli/index.js'),
         uninstallDependencies: fixture.dependencies,
       },
     );
     expect(result.status).toBe('uninstalled');
-    expect(existsSync(path.join(fixture.prefix, 'lib/mdspool'))).toBe(false);
+    expect(existsSync(path.join(fixture.prefix, 'lib/spool'))).toBe(false);
     expect(existsSync(fixture.userData)).toBe(true);
   });
 
   it('explains unmanaged and daemon-active refusal', async () => {
-    const root = mkdtempSync(path.join(tmpdir(), 'mdspool-uninstall-unmanaged-'));
+    const root = mkdtempSync(path.join(tmpdir(), 'spool-uninstall-unmanaged-'));
     expect((await runManagedUninstall({ prefix: path.join(root, 'prefix') })).status).toBe(
       'unmanaged',
     );
@@ -44,7 +44,7 @@ describe('managed uninstall command', () => {
 });
 
 async function fixtureInstall() {
-  const root = mkdtempSync(path.join(tmpdir(), 'mdspool-uninstall-'));
+  const root = mkdtempSync(path.join(tmpdir(), 'spool-uninstall-'));
   const prefix = path.join(root, 'prefix');
   const userData = path.join(root, 'state');
   mkdirSync(userData);
@@ -54,7 +54,7 @@ async function fixtureInstall() {
   mkdirSync(path.join(candidate, 'dist/cli'), { recursive: true });
   writeFileSync(
     path.join(candidate, 'package.json'),
-    JSON.stringify({ name: 'mdspool', version: '1.0.0' }),
+    JSON.stringify({ name: 'spool', version: '1.0.0' }),
   );
   writeFileSync(
     path.join(candidate, 'release-runtime.json'),
@@ -67,7 +67,7 @@ async function fixtureInstall() {
   );
   writeFileSync(path.join(candidate, 'dist/cli/index.js'), '#!/usr/bin/env node\n');
   chmodSync(path.join(candidate, 'dist/cli/index.js'), 0o755);
-  for (const alias of ['spool', 'mdspool']) {
+  for (const alias of ['spool']) {
     writeFileSync(path.join(candidate, 'bin', alias), "#!/bin/sh\nprintf '%s\\n' '1.0.0'\n");
     chmodSync(path.join(candidate, 'bin', alias), 0o755);
   }

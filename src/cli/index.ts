@@ -42,7 +42,7 @@ export function createProgram(): Command {
 
   program
     .command('init')
-    .description('run guided setup for the first MDSpool configuration')
+    .description('run guided setup for the first spool configuration')
     .option('--plain', 'use accessible line-oriented prompts instead of interactive controls')
     .action(async (options: { plain?: boolean }, command: Command) => {
       const globals = command.optsWithGlobals<{ config?: string }>();
@@ -123,7 +123,7 @@ export function createProgram(): Command {
 
   program
     .command('update')
-    .description('update an installer-owned MDSpool release')
+    .description('update an installer-owned spool release')
     .option('--version <version>', 'install an exact newer stable version')
     .option('--json', 'emit machine-readable JSON')
     .action(async (options: { version?: string; json?: boolean }, command: Command) => {
@@ -138,7 +138,7 @@ export function createProgram(): Command {
 
   program
     .command('uninstall')
-    .description('remove installer-owned MDSpool programs while preserving user data')
+    .description('remove installer-owned spool programs while preserving user data')
     .option('--json', 'emit machine-readable JSON')
     .action(async (options: { json?: boolean }, command: Command) => {
       const globals = command.optsWithGlobals<{ config?: string }>();
@@ -172,14 +172,14 @@ export function createProgram(): Command {
       if (result.kind === 'refused') throw new Error(result.reason);
       if (result.kind === 'requested') {
         process.stdout.write(
-          `Requested workspace acknowledgment for ${result.lease.canonicalWorkspace}; MDSpool will inspect it on the next daemon pass. If no daemon is running, rerun this command.\n`,
+          `Requested workspace acknowledgment for ${result.lease.canonicalWorkspace}; spool will inspect it on the next daemon pass. If no daemon is running, rerun this command.\n`,
         );
         return;
       }
       process.stdout.write(`Released workspace ${result.lease.canonicalWorkspace}\n`);
     });
 
-  const config = program.command('config').description('inspect and update MDSpool configuration');
+  const config = program.command('config').description('inspect and update spool configuration');
   config
     .command('show')
     .description('show the effective configuration with credential-shaped flags redacted')

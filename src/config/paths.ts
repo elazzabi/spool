@@ -14,15 +14,15 @@ export function defaultConfigPath(environment: ConfigPathEnvironment = {}): stri
   const env = environment.env ?? process.env;
 
   if (env.XDG_CONFIG_HOME) {
-    return path.join(env.XDG_CONFIG_HOME, 'mdspool', 'config.yaml');
+    return path.join(env.XDG_CONFIG_HOME, 'spool', 'config.yaml');
   }
   if (platform === 'win32' && env.APPDATA) {
-    return path.join(env.APPDATA, 'mdspool', 'config.yaml');
+    return path.join(env.APPDATA, 'spool', 'config.yaml');
   }
   if (platform === 'darwin') {
-    return path.join(homeDirectory, 'Library', 'Application Support', 'mdspool', 'config.yaml');
+    return path.join(homeDirectory, 'Library', 'Application Support', 'spool', 'config.yaml');
   }
-  return path.join(homeDirectory, '.config', 'mdspool', 'config.yaml');
+  return path.join(homeDirectory, '.config', 'spool', 'config.yaml');
 }
 
 export function resolveConfigPath(

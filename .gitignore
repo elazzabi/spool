@@ -7,7 +7,7 @@ coverage/
 *.sqlite
 *.sqlite-shm
 *.sqlite-wal
-.mdspool/
+.spool/
 .agents/scratchpad/
 .ce-personal/
 .compound-engineering/config.local.yaml

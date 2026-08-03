@@ -31,7 +31,7 @@ export class DaemonLockConflictError extends Error {
   readonly owner: DaemonOwnership;
 
   constructor(owner: DaemonOwnership) {
-    super(`Another MDSpool daemon owns this state store (pid ${String(owner.pid)})`);
+    super(`Another spool daemon owns this state store (pid ${String(owner.pid)})`);
     this.name = 'DaemonLockConflictError';
     this.owner = owner;
   }

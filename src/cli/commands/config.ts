@@ -11,7 +11,7 @@ import {
 } from '../../config/document.js';
 import { loadConfig } from '../../config/load.js';
 import { canonicalExistingDirectory, isPathInside } from '../../config/paths.js';
-import type { MDSpoolConfig } from '../../config/schema.js';
+import type { SpoolConfig } from '../../config/schema.js';
 import { deriveRepositoryMappings } from '../../config/setup.js';
 import { openLedgerDatabase } from '../../ledger/database.js';
 import {
@@ -35,7 +35,7 @@ export interface ConfigurationSummary {
     directive: string;
     defaultArgs: string[];
   }>;
-  repositories: MDSpoolConfig['repositories'];
+  repositories: SpoolConfig['repositories'];
 }
 
 export function configurationSummary(configPath?: string): ConfigurationSummary {
@@ -61,7 +61,7 @@ export function presentConfigurationSummary(
   summary: ConfigurationSummary,
   presenter: StaticCliPresenter,
 ): void {
-  presenter.intro('MDSpool configuration');
+  presenter.intro('spool configuration');
   presenter.section('General', [
     `Config: ${sanitizeTerminalText(summary.configPath)}`,
     `State: ${sanitizeTerminalText(summary.stateDirectory)}`,
@@ -141,7 +141,7 @@ export function presentWatchedFolders(
   folders: readonly string[],
   presenter: StaticCliPresenter,
 ): void {
-  presenter.intro('MDSpool watched folders');
+  presenter.intro('spool watched folders');
   presenter.section(
     'Folders',
     folders.length === 0

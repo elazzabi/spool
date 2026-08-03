@@ -5,7 +5,7 @@ import path from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
-import type { MDSpoolConfig } from '../../src/config/schema.js';
+import type { SpoolConfig } from '../../src/config/schema.js';
 import { openLedgerDatabase } from '../../src/ledger/database.js';
 import { OutboxRepository } from '../../src/ledger/outbox.js';
 import { LedgerRepository } from '../../src/ledger/repositories.js';
@@ -81,9 +81,7 @@ describe('realistic copied example vault', () => {
     expect(delegatedPrompts).toHaveLength(1);
     expect(delegatedPrompts[0]).toContain('Repository (ancestor): example/widget');
     expect(delegatedPrompts[0]).not.toContain('PR (ancestor):');
-    expect(delegatedPrompts[0]).toContain(
-      'MDSpool delegated this task from a Markdown source note.',
-    );
+    expect(delegatedPrompts[0]).toContain('spool delegated this task from a Markdown source note.');
     const transformedSource = readFileSync(sourceNote, 'utf8');
     const transformedCurrent = readFileSync(currentNote, 'utf8');
     expect(transformedSource).toContain('- [x] @codex Review the launch plan');
@@ -91,7 +89,7 @@ describe('realistic copied example vault', () => {
     expect(transformedSource).toContain('Latest output:');
     expect(transformedSource).toContain('Actionable fake review 3.');
     expect(transformedSource.match(/Task: /g)).toHaveLength(1);
-    expect(transformedSource.match(/Anchor: mdspool-/g)).toHaveLength(1);
+    expect(transformedSource.match(/Anchor: spool-/g)).toHaveLength(1);
     expect(transformedSource).toContain(`Inspect: cd ${fixture.clones[0]} && `);
     expect(transformedCurrent).toContain('- [ ] Check agent output using command');
     expect(transformedCurrent).toContain(
@@ -166,7 +164,7 @@ describe('realistic copied example vault', () => {
     expect(transformedSource).toContain('- [ ] Send the design notes to the team');
     expect(transformedSource).toContain('This paragraph mentions @claude in prose');
     expect(transformedSource).toContain('- [x] @codex This checked directive is already done');
-    expect(transformedSource.match(/Anchor: mdspool-/g)).toHaveLength(5);
+    expect(transformedSource.match(/Anchor: spool-/g)).toHaveLength(5);
     expect(transformedSource.match(/Agent needs input:/g)).toHaveLength(2);
     expect(transformedSource.match(/Check agent output using command/g)).toBeNull();
     expect(transformedCurrent.match(/Agent needs input:/g)).toHaveLength(2);
@@ -301,9 +299,9 @@ function createFixture(
   vault: string;
   state: string;
   clones: string[];
-  config: MDSpoolConfig;
+  config: SpoolConfig;
 } {
-  const root = mkdtempSync(path.join(tmpdir(), 'mdspool-example-vault-'));
+  const root = mkdtempSync(path.join(tmpdir(), 'spool-example-vault-'));
   const vault = path.join(root, 'vault');
   const state = path.join(root, 'state');
   mkdirSync(vault);
@@ -319,7 +317,7 @@ function createFixture(
     state,
     clones,
     config: {
-      configPath: path.join(root, 'mdspool.config.yaml'),
+      configPath: path.join(root, 'spool.config.yaml'),
       vaults: [vault],
       stateDirectory: state,
       timeZone: 'Europe/Istanbul',
@@ -338,7 +336,7 @@ function createFixture(
   };
 }
 
-function createRuntime(config: MDSpoolConfig, runner: ProviderRunner) {
+function createRuntime(config: SpoolConfig, runner: ProviderRunner) {
   const database = openLedgerDatabase(config.stateDirectory);
   const ledger = new LedgerRepository(database, { now });
   const outbox = new OutboxRepository(database, { now });
@@ -470,7 +468,7 @@ async function fakeRun(
 function initializeClone(directory: string): string {
   mkdirSync(directory);
   git(directory, ['init', '--initial-branch=main']);
-  git(directory, ['config', 'user.name', 'MDSpool Fixture']);
+  git(directory, ['config', 'user.name', 'spool Fixture']);
   git(directory, ['config', 'user.email', 'fixture@example.invalid']);
   writeFileSync(path.join(directory, 'README.md'), '# Disposable review fixture\n');
   git(directory, ['add', 'README.md']);

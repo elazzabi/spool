@@ -34,10 +34,10 @@ describe('CLI handoff commands', () => {
   });
 
   it('recognizes a canonical config path loaded through a symlinked default directory', () => {
-    const root = mkdtempSync(path.join(os.tmpdir(), 'mdspool-cli-output-'));
+    const root = mkdtempSync(path.join(os.tmpdir(), 'spool-cli-output-'));
     const canonicalConfigRoot = path.join(root, 'canonical');
     const defaultConfigRoot = path.join(root, 'default');
-    const canonicalConfig = path.join(canonicalConfigRoot, 'mdspool', 'config.yaml');
+    const canonicalConfig = path.join(canonicalConfigRoot, 'spool', 'config.yaml');
 
     try {
       mkdirSync(path.dirname(canonicalConfig), { recursive: true });
@@ -104,7 +104,7 @@ describe('ClackStaticCliPresenter', () => {
     const output = new PassThrough();
     const presenter = new ClackStaticCliPresenter({ output, bindings });
 
-    presenter.intro('MDSpool configuration');
+    presenter.intro('spool configuration');
     presenter.section('General', ['Config: /tmp/config.yaml', 'State: /tmp/state']);
     presenter.info('Codex: disabled');
     presenter.success('Claude: available');
@@ -113,7 +113,7 @@ describe('ClackStaticCliPresenter', () => {
     presenter.outro('Configuration inspection complete');
 
     expect(calls).toEqual([
-      'intro:MDSpool configuration',
+      'intro:spool configuration',
       'section:General:Config: /tmp/config.yaml|State: /tmp/state',
       'info:Codex: disabled',
       'success:Claude: available',
@@ -121,7 +121,7 @@ describe('ClackStaticCliPresenter', () => {
       'error:Pi: unavailable',
       'outro:Configuration inspection complete',
     ]);
-    expect(intro).toHaveBeenCalledWith('MDSpool configuration', output);
+    expect(intro).toHaveBeenCalledWith('spool configuration', output);
     expect(section).toHaveBeenCalledWith(
       'General',
       ['Config: /tmp/config.yaml', 'State: /tmp/state'],
@@ -135,7 +135,7 @@ describe('ClackStaticCliPresenter', () => {
     const output = new PassThrough();
     const presenter = new ClackStaticCliPresenter({ output });
 
-    presenter.intro('MDSpool doctor');
+    presenter.intro('spool doctor');
     presenter.section('Paths', ['Config: /tmp/config.yaml', 'State: /tmp/state']);
     presenter.success('Claude: available');
     presenter.info('Codex: disabled');
@@ -144,7 +144,7 @@ describe('ClackStaticCliPresenter', () => {
 
     const rendered = outputText(output);
     expect(rendered).not.toContain('\u001b[');
-    expect(rendered).toContain('MDSpool doctor');
+    expect(rendered).toContain('spool doctor');
     expect(rendered).toContain('Paths');
     expect(rendered).toContain('Config: /tmp/config.yaml');
     expect(rendered).toContain('State: /tmp/state');
@@ -158,7 +158,7 @@ describe('ClackStaticCliPresenter', () => {
     const output = new PassThrough();
     const presenter = new ClackStaticCliPresenter({ output, unicode: false });
 
-    presenter.intro('MDSpool doctor');
+    presenter.intro('spool doctor');
     presenter.section('Paths', ['Config: /tmp/config.yaml', 'State: /tmp/state']);
     presenter.success('Claude: available');
     presenter.info('Codex: disabled');
@@ -170,7 +170,7 @@ describe('ClackStaticCliPresenter', () => {
     expect([...rendered].every((character) => character.charCodeAt(0) <= 0x7f)).toBe(true);
     expect(rendered).toBe(
       [
-        'MDSpool doctor',
+        'spool doctor',
         'Paths',
         'Config: /tmp/config.yaml',
         'State: /tmp/state',

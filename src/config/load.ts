@@ -5,7 +5,7 @@ import YAML from 'yaml';
 import { ZodError } from 'zod';
 
 import {
-  type MDSpoolConfig,
+  type SpoolConfig,
   isIanaTimeZone,
   normalizeGitHubRepository,
   rawConfigSchema,
@@ -27,7 +27,7 @@ export interface LoadConfigOptions extends ConfigPathEnvironment {
   pathValue?: string;
 }
 
-export function loadConfig(explicitPath?: string, options: LoadConfigOptions = {}): MDSpoolConfig {
+export function loadConfig(explicitPath?: string, options: LoadConfigOptions = {}): SpoolConfig {
   const requestedPath = resolveConfigPath(explicitPath, options);
   let configPath: string;
   let parsed: unknown;

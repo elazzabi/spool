@@ -58,7 +58,7 @@ describe('provider smoke safety boundaries', () => {
   });
 
   it('proves the Pi launch, inspect, and owner-private managed-session contract', () => {
-    const root = mkdtempSync(path.join(tmpdir(), 'mdspool-pi-smoke-contract-'));
+    const root = mkdtempSync(path.join(tmpdir(), 'spool-pi-smoke-contract-'));
     const state = path.join(root, 'state');
     const sessions = path.join(state, 'pi', 'sessions');
     const workspace = path.join(root, 'workspace');
@@ -112,7 +112,7 @@ describe('provider smoke safety boundaries', () => {
   });
 
   it('retains active and unsafe evidence while pruning only old fully terminal logs', async () => {
-    const root = realpathSync(mkdtempSync(path.join(tmpdir(), 'mdspool-retention-')));
+    const root = realpathSync(mkdtempSync(path.join(tmpdir(), 'spool-retention-')));
     const state = path.join(root, 'state');
     mkdirSync(state);
     const database = openLedgerDatabase(state);
@@ -189,7 +189,7 @@ describe('provider smoke safety boundaries', () => {
       readFileSync(path.join(operationalDirectory, OPERATIONAL_ACTIVE_FILE), 'utf8'),
     ).toContain('runtime.started');
     expect(lstatSync(state).mode & 0o777).toBe(0o700);
-    expect(lstatSync(path.join(state, 'mdspool.sqlite')).mode & 0o777).toBe(0o600);
+    expect(lstatSync(path.join(state, 'spool.sqlite')).mode & 0o777).toBe(0o600);
 
     const refused = terminalFixture(ledger, path.join(logs, 'unlink-refused.log'), 'refused');
     chmodSync(logs, 0o500);

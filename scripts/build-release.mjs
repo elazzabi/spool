@@ -38,7 +38,7 @@ const repositoryRoot = fileURLToPath(new URL('..', import.meta.url));
 const metadataSuffix = '.metadata.json';
 
 export function artifactFilename({ version, platform, architecture, nodeMajor, nodeAbi }) {
-  return `mdspool-v${version}-node${nodeMajor}-abi${nodeAbi}-${platform}-${architecture}.tar.gz`;
+  return `spool-v${version}-node${nodeMajor}-abi${nodeAbi}-${platform}-${architecture}.tar.gz`;
 }
 
 export function createReleaseArchive({
@@ -192,7 +192,7 @@ export function buildRuntimeArtifact({ outputDirectory, platform, architecture }
     readFileSync(path.join(repositoryRoot, 'package.json'), 'utf8'),
   );
   const packageResult = inspectNpmPackage(repositoryRoot);
-  const temporaryRoot = mkdtempSync(path.join(tmpdir(), 'mdspool-release-build-'));
+  const temporaryRoot = mkdtempSync(path.join(tmpdir(), 'spool-release-build-'));
   const runtimeRoot = path.join(temporaryRoot, 'runtime');
   mkdirSync(runtimeRoot);
   try {
@@ -456,7 +456,7 @@ function writeRuntimePackage(runtimeRoot, manifest) {
 function writeLaunchers(runtimeRoot) {
   const launcher = `#!/bin/sh\nset -eu\nSCRIPT=$0\nwhile [ -L "$SCRIPT" ]; do\n  DIRECTORY=$(CDPATH= cd -P -- "$(dirname -- "$SCRIPT")" && pwd)\n  SCRIPT=$(readlink "$SCRIPT")\n  case $SCRIPT in /*) ;; *) SCRIPT=$DIRECTORY/$SCRIPT ;; esac\ndone\nROOT=$(CDPATH= cd -P -- "$(dirname -- "$SCRIPT")/.." && pwd)\nexec node "$ROOT/dist/cli/index.js" "$@"\n`;
   mkdirSync(path.join(runtimeRoot, 'bin'));
-  for (const alias of ['spool', 'mdspool']) {
+  for (const alias of ['spool']) {
     const target = path.join(runtimeRoot, 'bin', alias);
     writeFileSync(target, launcher, { mode: 0o755 });
     chmodSync(target, 0o755);

@@ -255,8 +255,8 @@ describe('POSIX release installer', () => {
     expect(existsSync(fixture.prefix)).toBe(false);
   });
 
-  it('activates real managed aliases and keeps smoke state isolated', async () => {
-    const root = mkdtempSync(path.join(tmpdir(), 'mdspool-install-e2e-'));
+  it('activates the real managed executable and keeps smoke state isolated', async () => {
+    const root = mkdtempSync(path.join(tmpdir(), 'spool-install-e2e-'));
     const candidate = createCandidate(root, {
       platform: process.platform,
       architecture: process.arch,
@@ -287,8 +287,8 @@ describe('POSIX release installer', () => {
     );
 
     expect(result).toMatchObject({ status: 'installed', exitCode: 0 });
-    expect(readlinkSync(path.join(prefix, 'lib/mdspool/current'))).toBe(`versions/${version}`);
-    for (const alias of ['spool', 'mdspool']) {
+    expect(readlinkSync(path.join(prefix, 'lib/spool/current'))).toBe(`versions/${version}`);
+    for (const alias of ['spool']) {
       const executed = spawnSync(path.join(prefix, 'bin', alias), ['--version'], {
         cwd: root,
         encoding: 'utf8',
@@ -302,7 +302,7 @@ describe('POSIX release installer', () => {
 });
 
 function bootstrapFixture() {
-  const root = mkdtempSync(path.join(tmpdir(), 'mdspool-bootstrap-e2e-'));
+  const root = mkdtempSync(path.join(tmpdir(), 'spool-bootstrap-e2e-'));
   const releases = path.join(root, 'releases');
   const assets = path.join(root, 'assets');
   mkdirSync(assets);
@@ -336,11 +336,11 @@ function bootstrapFixture() {
       '#!/bin/sh',
       'if [ "$1" = "-p" ]; then',
       '  case "$2" in',
-      '    *process.versions.modules*) printf "%s\\n" "${MDSPOOL_TEST_NODE_ABI:-137}"; exit 0 ;;',
-      '    *process.versions.node*) printf "%s\\n" "${MDSPOOL_TEST_NODE_MAJOR:-24}"; exit 0 ;;',
+      '    *process.versions.modules*) printf "%s\\n" "${SPOOL_TEST_NODE_ABI:-137}"; exit 0 ;;',
+      '    *process.versions.node*) printf "%s\\n" "${SPOOL_TEST_NODE_MAJOR:-24}"; exit 0 ;;',
       '  esac',
       'fi',
-      'exec "$MDSPOOL_TEST_REAL_NODE" "$@"',
+      'exec "$SPOOL_TEST_REAL_NODE" "$@"',
       '',
     ].join('\n'),
   );
@@ -382,10 +382,10 @@ function runBootstrap(
   const env: NodeJS.ProcessEnv = {
     ...process.env,
     PATH: `${fixture.fakeBin}${path.delimiter}${process.env.PATH ?? ''}`,
-    MDSPOOL_RELEASE_BASE_URL: overrides.releasesUrl ?? `file://${fixture.releases}`,
-    MDSPOOL_TEST_NODE_ABI: overrides.nodeAbi ?? RELEASE_NODE_ABI.toString(),
-    MDSPOOL_TEST_REAL_NODE: process.execPath,
-    MDSPOOL_TEST_RECORD: fixture.recordPath,
+    SPOOL_RELEASE_BASE_URL: overrides.releasesUrl ?? `file://${fixture.releases}`,
+    SPOOL_TEST_NODE_ABI: overrides.nodeAbi ?? RELEASE_NODE_ABI.toString(),
+    SPOOL_TEST_REAL_NODE: process.execPath,
+    SPOOL_TEST_RECORD: fixture.recordPath,
   };
   if (overrides.home === null) {
     delete env.HOME;
@@ -393,9 +393,9 @@ function runBootstrap(
     env.HOME = overrides.home;
   }
   if (overrides.configPath !== undefined) {
-    env.MDSPOOL_CONFIG_PATH = overrides.configPath;
+    env.SPOOL_CONFIG_PATH = overrides.configPath;
   } else {
-    delete env.MDSPOOL_CONFIG_PATH;
+    delete env.SPOOL_CONFIG_PATH;
   }
   const prefixArguments = overrides.includePrefix === false ? [] : ['--prefix', fixture.prefix];
   return spawnSync('/bin/sh', [installerPath, ...versionArguments, ...prefixArguments], {
@@ -415,7 +415,7 @@ function createCandidate(
   mkdirSync(path.join(candidate, 'dist/distribution'), { recursive: true });
   writeFileSync(
     path.join(candidate, 'package.json'),
-    `${JSON.stringify({ name: 'mdspool', version, type: 'module' })}\n`,
+    `${JSON.stringify({ name: 'spool', version, type: 'module' })}\n`,
   );
   writeFileSync(
     path.join(candidate, 'release-runtime.json'),
@@ -429,7 +429,7 @@ function createCandidate(
   const cli = path.join(candidate, 'dist/cli/index.js');
   writeFileSync(cli, '#!/usr/bin/env node\n');
   chmodSync(cli, 0o755);
-  for (const alias of ['spool', 'mdspool']) {
+  for (const alias of ['spool']) {
     const launcher = path.join(candidate, 'bin', alias);
     writeFileSync(launcher, `#!/bin/sh\nprintf '%s\\n' '${version}'\n`);
     chmodSync(launcher, 0o755);
@@ -440,7 +440,7 @@ function createCandidate(
     options.realInstaller
       ? [
           "import { writeFileSync } from 'node:fs';",
-          'writeFileSync(process.env.MDSPOOL_TEST_RECORD, JSON.stringify(process.argv.slice(2)));',
+          'writeFileSync(process.env.SPOOL_TEST_RECORD, JSON.stringify(process.argv.slice(2)));',
           "process.stdout.write('stub managed install complete\\n');",
           '',
         ].join('\n')

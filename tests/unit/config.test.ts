@@ -18,7 +18,7 @@ interface Fixture {
 }
 
 function createFixture(): Fixture {
-  const root = mkdtempSync(path.join(tmpdir(), 'mdspool-config-'));
+  const root = mkdtempSync(path.join(tmpdir(), 'spool-config-'));
   const vault = path.join(root, 'vault');
   const state = path.join(root, 'state');
   const cloneA = path.join(root, 'clone-a');
@@ -65,10 +65,10 @@ repositories:
 }
 
 describe('configuration', () => {
-  it('uses the MDSpool config directory by default', () => {
-    const root = mkdtempSync(path.join(tmpdir(), 'mdspool-config-path-'));
+  it('uses the spool config directory by default', () => {
+    const root = mkdtempSync(path.join(tmpdir(), 'spool-config-path-'));
     const environment = { platform: 'darwin' as const, homeDirectory: root, env: {} };
-    const primary = path.join(root, 'Library', 'Application Support', 'mdspool', 'config.yaml');
+    const primary = path.join(root, 'Library', 'Application Support', 'spool', 'config.yaml');
 
     expect(defaultConfigPath(environment)).toBe(primary);
     expect(resolveConfigPath(undefined, environment)).toBe(primary);
@@ -100,7 +100,7 @@ describe('configuration', () => {
   it.each([
     ['poll interval', 'pollIntervalSeconds: 30', 'pollIntervalSeconds: 46'],
     ['time zone', 'timeZone: Europe/Istanbul', 'timeZone: Mars/Olympus_Mons'],
-    ['missing vault', /vaults:\n {2}- .*/, 'vaults:\n  - "/definitely/missing/mdspool-vault"'],
+    ['missing vault', /vaults:\n {2}- .*/, 'vaults:\n  - "/definitely/missing/spool-vault"'],
   ])('rejects an invalid %s without creating state files', (_name, find, replacement) => {
     const fixture = createFixture();
     const yaml = validYaml(fixture).replace(find, replacement);
@@ -138,7 +138,7 @@ describe('configuration', () => {
 
   it('rejects a machine state directory inside a watched vault', () => {
     const fixture = createFixture();
-    const nestedState = path.join(fixture.vault, '.mdspool-state');
+    const nestedState = path.join(fixture.vault, '.spool-state');
     mkdirSync(nestedState);
     const yaml = validYaml(fixture).replace(
       `stateDirectory: ${JSON.stringify(fixture.state)}`,

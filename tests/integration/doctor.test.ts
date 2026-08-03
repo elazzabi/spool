@@ -15,7 +15,7 @@ import type { StaticCliPresenter } from '../../src/cli/output.js';
 import { loadConfig } from '../../src/config/load.js';
 
 function configWithProviders(defaultArgs: string[] = []): ReturnType<typeof loadConfig> {
-  const root = mkdtempSync(path.join(tmpdir(), 'mdspool-doctor-'));
+  const root = mkdtempSync(path.join(tmpdir(), 'spool-doctor-'));
   const vault = path.join(root, 'vault');
   const state = path.join(root, 'state');
   const clone = path.join(root, 'clone');
@@ -119,7 +119,7 @@ describe('doctor', () => {
     presentDoctorReport(report, presenter);
 
     expect(calls).toEqual([
-      'intro:MDSpool doctor',
+      'intro:spool doctor',
       'section:Paths:Config: /tmp/config.yaml|State: /tmp/state',
       'error:Overall: attention needed',
       'success:claude: available',

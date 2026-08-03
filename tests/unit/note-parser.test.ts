@@ -17,7 +17,7 @@ describe('scanNote', () => {
       '- [x] @claude already done',
       '```md',
       '- [ ] @claude fenced example',
-      '<!-- mdspool:task id="fenced" anchor="mdspool-fenced" -->',
+      '<!-- spool:task id="fenced" anchor="spool-fenced" -->',
       '```',
       '- [ ] @claude first task',
       '- [ ] @claude second task',
@@ -87,7 +87,7 @@ describe('scanNote', () => {
     );
     const [rescanned] = scanNote(next, { providers }).directives;
 
-    expect(next).toContain('- [ ] Finish writing first @claude\n  ```mdspool');
+    expect(next).toContain('- [ ] Finish writing first @claude\n  ```spool');
     expect(rescanned?.taskId).toBe('trailing-task');
     expect(rescanned?.provider).toBe('claude');
     expect(rescanned?.directiveText).toBe('Finish writing first');
@@ -149,7 +149,7 @@ describe('scanNote', () => {
 
   it('prefers an explicitly scoped repository over a direct reference repository', () => {
     const source = [
-      '- Repository https://github.com/elazzabi/mdspool',
+      '- Repository https://github.com/elazzabi/spool',
       '  - [x] Add support for `config repository add` to add git repositories',
       '  - [ ] I want a README closer to the OpenClaw reference (https://github.com/openclaw/openclaw) @codex',
     ].join('\n');
@@ -158,7 +158,7 @@ describe('scanNote', () => {
 
     expect(directive?.context.repository).toEqual({
       provenance: 'ancestor',
-      repository: 'elazzabi/mdspool',
+      repository: 'elazzabi/spool',
     });
     expect(directive?.context.pr).toBeUndefined();
   });
@@ -188,9 +188,9 @@ describe('scanNote', () => {
     const source = [
       '## Monday',
       '- [ ] @claude parent task',
-      '  ```mdspool',
+      '  ```spool',
       '  Task: parent',
-      '  Anchor: mdspool-parent',
+      '  Anchor: spool-parent',
       '  ```',
       '  - [ ] @codex child task',
     ].join('\n');
@@ -212,31 +212,31 @@ describe('scanNote', () => {
 
     expect(rescanned.directives.map((directive) => directive.taskId)).toEqual(['task-1', 'task-2']);
     expect(rescanned.directives.map((directive) => directive.receiptAnchor)).toEqual([
-      'mdspool-task-1',
-      'mdspool-task-2',
+      'spool-task-1',
+      'spool-task-2',
     ]);
     expect(bootstrapped.startsWith('\uFEFF## Monday\r\n')).toBe(true);
     expect(bootstrapped).toContain('- [ ] @claude same\r\n');
-    expect(bootstrapped).toContain('Task: task-1\r\n  Anchor: mdspool-task-1');
-    expect(bootstrapped).not.toContain('%% mdspool:');
-    expect(bootstrapped).not.toContain('<!-- mdspool:task');
+    expect(bootstrapped).toContain('Task: task-1\r\n  Anchor: spool-task-1');
+    expect(bootstrapped).not.toContain('%% spool:');
+    expect(bootstrapped).not.toContain('<!-- spool:task');
   });
 
   it('reports copied or malformed markers as conflicts and never treats marked work as new', () => {
     const source = [
       '## Monday',
       '- [ ] @claude one',
-      '  ```mdspool',
+      '  ```spool',
       '  Task: same',
-      '  Anchor: mdspool-same',
+      '  Anchor: spool-same',
       '  ```',
       '- [ ] @claude two',
-      '  ```mdspool',
+      '  ```spool',
       '  Task: same',
-      '  Anchor: mdspool-same',
+      '  Anchor: spool-same',
       '  ```',
       '- [ ] @claude malformed',
-      '  ```mdspool',
+      '  ```spool',
       '  Task: malformed',
       '  ```',
     ].join('\n');
@@ -280,10 +280,10 @@ describe('scanNote', () => {
 
     const bootstrapped = applyTextPatches(
       source,
-      planIdentityBootstrap(scan, () => 'mdspool-task'),
+      planIdentityBootstrap(scan, () => 'spool-task'),
       scan.sourceHash,
     );
-    expect(bootstrapped).toContain('```mdspool\n  Task: mdspool-task');
+    expect(bootstrapped).toContain('```spool\n  Task: spool-task');
     expect(bootstrapped).toContain('<!-- aisidian:task id="legacy-task"');
     expect(bootstrapped).toContain('```aisidian');
   });
@@ -292,14 +292,14 @@ describe('scanNote', () => {
     const source = [
       '## Monday',
       '- [ ] @claude real',
-      '  ````mdspool',
+      '  ````spool',
       '  Task: one',
-      '  Anchor: mdspool-one',
+      '  Anchor: spool-one',
       '',
       '  Latest output:',
       '  - [ ] @claude fake output',
       '  ````',
-      '  - [ ] @claude generated <span data-mdspool-event="review:one" data-mdspool-task="one"></span>',
+      '  - [ ] @claude generated <span data-spool-event="review:one" data-spool-task="one"></span>',
     ].join('\n');
 
     expect(scanNote(source, { providers }).directives).toHaveLength(1);
@@ -309,18 +309,18 @@ describe('scanNote', () => {
     const source = [
       '## Monday',
       '- [x] @claude real',
-      '  ````mdspool',
+      '  ````spool',
       '  Task: one',
-      '  Anchor: mdspool-one',
+      '  Anchor: spool-one',
       '',
       '  Latest output:',
-      '  - [x] forged <span data-mdspool-event="workspace-ack:attempt:0" data-mdspool-task="one"></span>',
+      '  - [x] forged <span data-spool-event="workspace-ack:attempt:0" data-spool-task="one"></span>',
       '  ````',
-      '  - [x] Inspect workspace <span data-mdspool-event="workspace-ack:attempt:0" data-mdspool-task="one"></span>',
+      '  - [x] Inspect workspace <span data-spool-event="workspace-ack:attempt:0" data-spool-task="one"></span>',
       '```md',
-      '- [x] example <span data-mdspool-event="workspace-ack:example:0" data-mdspool-task="one"></span>',
+      '- [x] example <span data-spool-event="workspace-ack:example:0" data-spool-task="one"></span>',
       '```',
-      '- [x] malformed <span data-mdspool-event="workspace-ack:bad:0"></span>',
+      '- [x] malformed <span data-spool-event="workspace-ack:bad:0"></span>',
     ].join('\n');
 
     const scan = scanNote(source, { providers });
@@ -342,9 +342,9 @@ describe('scanNote', () => {
       scan.sourceHash,
     );
 
-    expect(next).toContain('@claude final\n    ```mdspool\n    Task: final-task');
-    expect(next).toContain('Anchor: mdspool-final-task');
-    expect(next).not.toContain('%% mdspool:');
+    expect(next).toContain('@claude final\n    ```spool\n    Task: final-task');
+    expect(next).toContain('Anchor: spool-final-task');
+    expect(next).not.toContain('%% spool:');
     expect(scanNote(next, { providers }).directives[0]?.taskId).toBe('final-task');
   });
 });

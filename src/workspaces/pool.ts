@@ -162,7 +162,7 @@ export class WorkspacePool {
           code: 'leased',
           message: job
             ? `In use by task ${job.sourceMarker} (${job.state}; job ${job.id})`
-            : `Workspace has an active MDSpool lease for unknown job ${lease.jobId}`,
+            : `Workspace has an active spool lease for unknown job ${lease.jobId}`,
           ...(job
             ? {
                 blockingLease: {
@@ -186,7 +186,7 @@ export class WorkspacePool {
         code: availability === 'busy' ? 'leased' : 'sentinel-unsafe',
         message:
           availability === 'busy'
-            ? 'Workspace has a live or indeterminate MDSpool lease sentinel'
+            ? 'Workspace has a live or indeterminate spool lease sentinel'
             : 'Workspace lease sentinel cannot be inspected safely',
       });
     }

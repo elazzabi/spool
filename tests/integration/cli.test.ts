@@ -36,22 +36,21 @@ afterEach(() => {
 });
 
 describe('operator CLI commands', () => {
-  it('uses MDSpool branding with the spool executable name', () => {
+  it('uses spool branding with the spool executable name', () => {
     const program = createProgram();
 
     expect(program.name()).toBe('spool');
     expect(program.description()).toContain('Markdown');
   });
 
-  it('retains both the short and full CLI names', () => {
+  it('exposes the spool CLI name', () => {
     const manifest = JSON.parse(
       readFileSync(new URL('../../package.json', import.meta.url), 'utf8'),
     ) as { name?: string; bin?: Record<string, string> };
 
-    expect(manifest.name).toBe('mdspool');
+    expect(manifest.name).toBe('spool');
     expect(manifest.bin).toEqual({
       spool: 'dist/cli/index.js',
-      mdspool: 'dist/cli/index.js',
     });
   });
 
@@ -85,7 +84,7 @@ describe('operator CLI commands', () => {
     const fixture = cliFixture();
     const output = captureStdout();
 
-    await createProgram().parseAsync(['node', 'mdspool', '--config', fixture.configPath, 'logs']);
+    await createProgram().parseAsync(['node', 'spool', '--config', fixture.configPath, 'logs']);
     expect(output.text()).toBe('No operational logs found.\n');
     expect(readdirSync(fixture.state)).toEqual([]);
 
@@ -105,7 +104,7 @@ describe('operator CLI commands', () => {
     const before = readFileSync(active);
 
     output.clear();
-    await createProgram().parseAsync(['node', 'mdspool', '--config', fixture.configPath, 'logs']);
+    await createProgram().parseAsync(['node', 'spool', '--config', fixture.configPath, 'logs']);
 
     expect(output.text()).toContain('runtime.started');
     expect(output.text()).toContain(`runtime=${runtimeId}`);
@@ -114,9 +113,9 @@ describe('operator CLI commands', () => {
   });
 
   it('recognizes a symlinked executable as the CLI entrypoint', () => {
-    const root = mkdtempSync(path.join(tmpdir(), 'mdspool-linked-cli-'));
+    const root = mkdtempSync(path.join(tmpdir(), 'spool-linked-cli-'));
     const target = path.join(root, 'index.js');
-    const linkedExecutable = path.join(root, 'mdspool');
+    const linkedExecutable = path.join(root, 'spool');
     writeFileSync(target, '#!/usr/bin/env node\n');
     symlinkSync(target, linkedExecutable);
 
@@ -141,8 +140,8 @@ describe('operator CLI commands', () => {
     database.close();
     const output = captureStdout();
 
-    await createProgram().parseAsync(['node', 'mdspool', '--config', fixture.configPath, 'status']);
-    expect(output.text()).toContain('MDSpool status');
+    await createProgram().parseAsync(['node', 'spool', '--config', fixture.configPath, 'status']);
+    expect(output.text()).toContain('spool status');
     expect(output.text()).toContain('Jobs');
     expect(output.text()).toContain('Task: cli-task');
     expect(output.text()).toContain(`Job ID: ${job.id}`);
@@ -158,7 +157,7 @@ describe('operator CLI commands', () => {
     output.clear();
     await createProgram().parseAsync([
       'node',
-      'mdspool',
+      'spool',
       '--config',
       fixture.configPath,
       'status',
@@ -171,7 +170,7 @@ describe('operator CLI commands', () => {
     output.clear();
     await createProgram().parseAsync([
       'node',
-      'mdspool',
+      'spool',
       '--config',
       fixture.configPath,
       'cancel',
@@ -182,13 +181,13 @@ describe('operator CLI commands', () => {
     output.clear();
     await createProgram().parseAsync([
       'node',
-      'mdspool',
+      'spool',
       '--config',
       fixture.configPath,
       'workspace',
       'list',
     ]);
-    expect(output.text()).toContain('MDSpool workspaces');
+    expect(output.text()).toContain('spool workspaces');
     expect(output.text()).toContain('Repositories');
     expect(output.text()).toContain('1 configured repository');
     expect(output.text()).toContain('example/widget pool');
@@ -202,7 +201,7 @@ describe('operator CLI commands', () => {
     output.clear();
     await createProgram().parseAsync([
       'node',
-      'mdspool',
+      'spool',
       '--config',
       fixture.configPath,
       'workspace',
@@ -222,14 +221,14 @@ describe('operator CLI commands', () => {
       ],
       leases: [],
     });
-    expect(output.text()).not.toContain('MDSpool workspaces');
+    expect(output.text()).not.toContain('spool workspaces');
   });
 
   it('presents explicit empty states for durable status', async () => {
     const fixture = cliFixture();
     const output = captureStdout();
 
-    await createProgram().parseAsync(['node', 'mdspool', '--config', fixture.configPath, 'status']);
+    await createProgram().parseAsync(['node', 'spool', '--config', fixture.configPath, 'status']);
     expect(output.text()).toContain('No durable jobs.');
     expect(output.text()).toContain('No workspace leases.');
   });
@@ -241,7 +240,7 @@ describe('operator CLI commands', () => {
 
     await createProgram().parseAsync([
       'node',
-      'mdspool',
+      'spool',
       '--config',
       fixture.configPath,
       'workspace',
@@ -277,7 +276,7 @@ describe('operator CLI commands', () => {
 
     await createProgram().parseAsync([
       'node',
-      'mdspool',
+      'spool',
       '--config',
       fixture.configPath,
       'workspace',
@@ -299,7 +298,7 @@ describe('operator CLI commands', () => {
     output.clear();
     await createProgram().parseAsync([
       'node',
-      'mdspool',
+      'spool',
       '--config',
       fixture.configPath,
       'workspace',
@@ -309,7 +308,7 @@ describe('operator CLI commands', () => {
 
     ledger.refuseWorkspaceCliAcknowledgment(fixture.clone, 'fixture refusal');
     output.clear();
-    await createProgram().parseAsync(['node', 'mdspool', '--config', fixture.configPath, 'status']);
+    await createProgram().parseAsync(['node', 'spool', '--config', fixture.configPath, 'status']);
     expect(output.text()).toContain('Acknowledgment: refused');
     expect(output.text()).toContain('Reason: fixture refusal');
     daemonLock.release(daemonOwner);
@@ -325,9 +324,9 @@ describe('operator CLI commands', () => {
         '## Saturday',
         '',
         '- [ ] @fake Review https://github.com/example/widget/pull/1',
-        '  ```mdspool',
+        '  ```spool',
         '  Task: orphan-cli',
-        '  Anchor: mdspool-orphan-cli',
+        '  Anchor: spool-orphan-cli',
         '  ```',
         '',
       ].join('\n'),
@@ -336,7 +335,7 @@ describe('operator CLI commands', () => {
 
     await createProgram().parseAsync([
       'node',
-      'mdspool',
+      'spool',
       '--config',
       fixture.configPath,
       'run-once',
@@ -352,14 +351,8 @@ describe('operator CLI commands', () => {
     );
 
     output.clear();
-    await createProgram().parseAsync([
-      'node',
-      'mdspool',
-      '--config',
-      fixture.configPath,
-      'run-once',
-    ]);
-    expect(output.text()).toContain('MDSpool reconciliation');
+    await createProgram().parseAsync(['node', 'spool', '--config', fixture.configPath, 'run-once']);
+    expect(output.text()).toContain('spool reconciliation');
     expect(output.text()).toContain('Summary');
     expect(output.text()).toContain('Passes:');
     expect(output.text()).toContain('Claimed jobs:');
@@ -376,7 +369,7 @@ describe('operator CLI commands', () => {
 
     await createProgram().parseAsync([
       'node',
-      'mdspool',
+      'spool',
       '--config',
       fixture.configPath,
       'config',
@@ -389,7 +382,7 @@ describe('operator CLI commands', () => {
     output.clear();
     await createProgram().parseAsync([
       'node',
-      'mdspool',
+      'spool',
       '--config',
       fixture.configPath,
       'config',
@@ -404,14 +397,14 @@ describe('operator CLI commands', () => {
     output.clear();
     await createProgram().parseAsync([
       'node',
-      'mdspool',
+      'spool',
       '--config',
       fixture.configPath,
       'config',
       'watch',
       'list',
     ]);
-    expect(output.text()).toContain('MDSpool watched folders');
+    expect(output.text()).toContain('spool watched folders');
     expect(output.text()).toContain('Folders');
     expect(compactStaticPresentation(output.text())).toContain(fixture.vault);
     expect(compactStaticPresentation(output.text())).toContain(fixture.secondVault);
@@ -420,7 +413,7 @@ describe('operator CLI commands', () => {
     const remove = () =>
       createProgram().parseAsync([
         'node',
-        'mdspool',
+        'spool',
         '--config',
         fixture.configPath,
         'config',
@@ -436,7 +429,7 @@ describe('operator CLI commands', () => {
       processStartIdentity: currentProcessStartIdentity(),
     };
     daemonLock.acquire(daemonOwner, 30_000);
-    await expect(remove()).rejects.toThrow(/another MDSpool daemon/i);
+    await expect(remove()).rejects.toThrow(/another spool daemon/i);
     daemonLock.release(daemonOwner);
     daemonDatabase.close();
 
@@ -481,7 +474,7 @@ describe('operator CLI commands', () => {
     for (const json of [false, true]) {
       await createProgram().parseAsync([
         'node',
-        'mdspool',
+        'spool',
         '--config',
         fixture.configPath,
         'config',
@@ -517,7 +510,7 @@ describe('operator CLI commands', () => {
 
     await createProgram().parseAsync([
       'node',
-      'mdspool',
+      'spool',
       '--config',
       fixture.configPath,
       'config',
@@ -526,7 +519,7 @@ describe('operator CLI commands', () => {
 
     const rendered = output.text();
     const headings = [
-      'MDSpool configuration',
+      'spool configuration',
       'General',
       'Watched folders',
       'Providers',
@@ -556,15 +549,9 @@ describe('operator CLI commands', () => {
     process.exitCode = undefined;
 
     try {
-      await createProgram().parseAsync([
-        'node',
-        'mdspool',
-        '--config',
-        fixture.configPath,
-        'doctor',
-      ]);
+      await createProgram().parseAsync(['node', 'spool', '--config', fixture.configPath, 'doctor']);
 
-      expect(output.text()).toContain('MDSpool doctor');
+      expect(output.text()).toContain('spool doctor');
       expect(output.text()).toContain('Overall: attention needed');
       expect(output.text()).toContain('fake: unavailable');
       expect(output.text()).toContain('no runtime adapter is registered for this provider');
@@ -575,7 +562,7 @@ describe('operator CLI commands', () => {
       process.exitCode = undefined;
       await createProgram().parseAsync([
         'node',
-        'mdspool',
+        'spool',
         '--config',
         fixture.configPath,
         'doctor',
@@ -589,7 +576,7 @@ describe('operator CLI commands', () => {
         providers: [{ name: 'fake', available: false }],
       });
       expect(jsonOutput).toBe(`${JSON.stringify(JSON.parse(jsonOutput), null, 2)}\n`);
-      expect(jsonOutput).not.toContain('MDSpool doctor');
+      expect(jsonOutput).not.toContain('spool doctor');
       expect(jsonOutput).not.toContain('\u001b');
       expect(process.exitCode).toBe(1);
     } finally {
@@ -608,7 +595,7 @@ describe('operator CLI commands', () => {
 
     await createProgram().parseAsync([
       'node',
-      'mdspool',
+      'spool',
       '--config',
       fixture.configPath,
       'config',
@@ -627,7 +614,7 @@ describe('operator CLI commands', () => {
     output.clear();
     await createProgram().parseAsync([
       'node',
-      'mdspool',
+      'spool',
       '--config',
       fixture.configPath,
       'config',
@@ -655,7 +642,7 @@ describe('operator CLI commands', () => {
       process.chdir(fixture.root);
       await createProgram().parseAsync([
         'node',
-        'mdspool',
+        'spool',
         '--config',
         fixture.configPath,
         'config',
@@ -714,7 +701,7 @@ describe('operator CLI commands', () => {
     await expect(
       createProgram().parseAsync([
         'node',
-        'mdspool',
+        'spool',
         '--config',
         fixture.configPath,
         'config',
@@ -745,7 +732,7 @@ describe('operator CLI commands', () => {
     await expect(
       createProgram().parseAsync([
         'node',
-        'mdspool',
+        'spool',
         '--config',
         fixture.configPath,
         'config',
@@ -771,7 +758,7 @@ describe('operator CLI commands', () => {
     try {
       await createProgram().parseAsync([
         'node',
-        'mdspool',
+        'spool',
         '--config',
         fixture.configPath,
         'config',
@@ -797,7 +784,7 @@ describe('operator CLI commands', () => {
     await expect(
       createProgram().parseAsync([
         'node',
-        'mdspool',
+        'spool',
         '--config',
         missingConfig,
         'config',
@@ -812,7 +799,7 @@ describe('operator CLI commands', () => {
     await expect(
       createProgram().parseAsync([
         'node',
-        'mdspool',
+        'spool',
         '--config',
         fixture.configPath,
         'config',
@@ -820,7 +807,7 @@ describe('operator CLI commands', () => {
         'add',
         clone,
       ]),
-    ).rejects.toThrow(/another MDSpool configuration update/i);
+    ).rejects.toThrow(/another spool configuration update/i);
     expect(readFileSync(fixture.configPath, 'utf8')).toBe(before);
   });
 
@@ -842,7 +829,7 @@ describe('operator CLI commands', () => {
 
     await createProgram().parseAsync([
       'node',
-      'mdspool',
+      'spool',
       '--config',
       fixture.configPath,
       'config',
@@ -865,7 +852,7 @@ function cliFixture(): {
   secondVault: string;
   configPath: string;
 } {
-  const root = realpathSync(mkdtempSync(path.join(tmpdir(), 'mdspool-cli-')));
+  const root = realpathSync(mkdtempSync(path.join(tmpdir(), 'spool-cli-')));
   const vault = path.join(root, 'vault');
   const state = path.join(root, 'state');
   const clone = path.join(root, 'clone');
@@ -882,7 +869,7 @@ function cliFixture(): {
   git(clone, ['commit', '-m', 'fixture']);
   git(clone, ['remote', 'add', 'origin', 'git@github.com:example/widget.git']);
   writeFileSync(path.join(vault, 'Week 29 of 2026.md'), '## Saturday\n\n- [ ] unrelated\n');
-  const configPath = path.join(root, 'mdspool.config.yaml');
+  const configPath = path.join(root, 'spool.config.yaml');
   writeFileSync(
     configPath,
     [

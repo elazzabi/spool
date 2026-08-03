@@ -3,7 +3,7 @@ import path from 'node:path';
 
 import { spoolArgv } from '../cli/output.js';
 import { samePath } from '../config/paths.js';
-import type { MDSpoolConfig } from '../config/schema.js';
+import type { SpoolConfig } from '../config/schema.js';
 import { isTerminalJobState, type Attempt, type Job } from '../domain/job.js';
 import {
   currentProcessStartIdentity,
@@ -68,7 +68,7 @@ type ReconcilerOperationalLog = Pick<
 >;
 
 export class Reconciler {
-  readonly #config: MDSpoolConfig;
+  readonly #config: SpoolConfig;
   readonly #ledger: LedgerRepository;
   readonly #outbox: OutboxRepository;
   readonly #providers: ProviderRegistry;
@@ -89,7 +89,7 @@ export class Reconciler {
   #shutdownPromise: Promise<void> | null = null;
 
   constructor(options: {
-    config: MDSpoolConfig;
+    config: SpoolConfig;
     database: LedgerDatabase;
     ledger: LedgerRepository;
     outbox: OutboxRepository;
@@ -325,7 +325,7 @@ export class Reconciler {
     const duration = this.#ownershipDuration();
     if (this.#ownsLock) {
       if (!this.#daemonLock.heartbeat(this.#owner, duration)) {
-        throw new Error('MDSpool lost durable daemon ownership; dispatch is disabled');
+        throw new Error('spool lost durable daemon ownership; dispatch is disabled');
       }
       return;
     }
@@ -413,7 +413,7 @@ export class Reconciler {
         }),
       ]);
       if (!idle && !this.#daemonLock.heartbeat(this.#owner, this.#ownershipDuration())) {
-        throw new Error('MDSpool lost durable daemon ownership while waiting for a provider');
+        throw new Error('spool lost durable daemon ownership while waiting for a provider');
       }
     }
     await completion;
@@ -496,7 +496,7 @@ export class Reconciler {
       ) {
         this.#ledger.markAttemptUncertain(
           attempt.id,
-          'Attached provider process cannot be observed after restart; MDSpool will not relaunch it',
+          'Attached provider process cannot be observed after restart; spool will not relaunch it',
         );
         const job = this.#ledger.getJob(attempt.jobId);
         if (job) {

@@ -165,7 +165,7 @@ jobs:
               exit 1
             fi
           else
-            gh release create "$RELEASE_TAG" --draft --verify-tag --title "MDSpool $RELEASE_TAG" --generate-notes
+            gh release create "$RELEASE_TAG" --draft --verify-tag --title "spool $RELEASE_TAG" --generate-notes
           fi
           gh release upload "$RELEASE_TAG" release/*.tar.gz release/release-manifest.json release/SHA256SUMS --clobber
 

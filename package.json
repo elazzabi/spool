@@ -1,5 +1,5 @@
 {
-  "name": "mdspool",
+  "name": "spool",
   "version": "0.1.0",
   "private": true,
   "description": "A Markdown-native control plane for local AI agents",
@@ -11,23 +11,22 @@
     "obsidian"
   ],
   "license": "SEE LICENSE IN LICENSE.md",
-  "homepage": "https://github.com/elazzabi/mdspool#readme",
+  "homepage": "https://github.com/elazzabi/spool#readme",
   "bugs": {
-    "url": "https://github.com/elazzabi/mdspool/issues"
+    "url": "https://github.com/elazzabi/spool/issues"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/elazzabi/mdspool.git"
+    "url": "git+https://github.com/elazzabi/spool.git"
   },
   "type": "module",
   "bin": {
-    "spool": "dist/cli/index.js",
-    "mdspool": "dist/cli/index.js"
+    "spool": "dist/cli/index.js"
   },
   "files": [
     "dist",
     "examples/providers/fake-agent.mjs",
-    "examples/mdspool.config.yaml",
+    "examples/spool.config.yaml",
     "examples/vault",
     "examples/repos/README.md",
     "scripts/smoke-providers.mjs",

@@ -24,7 +24,7 @@ interface IdentityMarker extends SourceSpan {
   receipt: ReceiptRegion;
 }
 
-interface MDSpoolBlock extends SourceSpan {
+interface SpoolBlock extends SourceSpan {
   taskId: string | null;
   anchor: string | null;
 }
@@ -35,10 +35,10 @@ interface HeadingPosition {
 }
 
 const eventMarkers = [
-  /<span[\t ]+data-mdspool-event="([^"\r\n]+)"[\t ]+data-mdspool-task="([^"\r\n]+)"[\t ]*><\/span>/g,
+  /<span[\t ]+data-spool-event="([^"\r\n]+)"[\t ]+data-spool-task="([^"\r\n]+)"[\t ]*><\/span>/g,
 ];
 const potentialEventMarker =
-  /<span\b[^>\r\n]*(?:data-mdspool-event|data-mdspool-task)[^>\r\n]*>(?:<\/span>)?/g;
+  /<span\b[^>\r\n]*(?:data-spool-event|data-spool-task)[^>\r\n]*>(?:<\/span>)?/g;
 
 export function hashNoteSource(source: string): string {
   return createHash('sha256').update(source, 'utf8').digest('hex');
@@ -127,7 +127,7 @@ function parseEventRegions(
     }
     conflicts.push({
       kind: 'malformed-event-marker',
-      message: 'A generated MDSpool event marker is malformed.',
+      message: 'A generated spool event marker is malformed.',
       span: { start: match.index, end: match.index + match[0].length },
     });
   }
@@ -177,19 +177,15 @@ function collectCodeSpans(node: Nodes, result: SourceSpan[] = []): SourceSpan[] 
   return result;
 }
 
-function collectMDSpoolBlocks(
-  source: string,
-  node: Nodes,
-  result: MDSpoolBlock[] = [],
-): MDSpoolBlock[] {
+function collectSpoolBlocks(source: string, node: Nodes, result: SpoolBlock[] = []): SpoolBlock[] {
   if (node.type === 'code') {
-    if (node.lang !== 'mdspool') return result;
+    if (node.lang !== 'spool') return result;
     const start = offsetOf(node, 'start');
     const end = offsetOf(node, 'end');
     if (start === null || end === null) return result;
     const lines = node.value.split(/\r?\n/);
     const task = /^Task: ([A-Za-z0-9][A-Za-z0-9._:-]{0,127})$/.exec(lines[0] ?? '');
-    const anchor = /^Anchor: (mdspool-[A-Za-z0-9-]+)$/.exec(lines[1] ?? '');
+    const anchor = /^Anchor: (spool-[A-Za-z0-9-]+)$/.exec(lines[1] ?? '');
     const taskId = task?.[1] ?? null;
     result.push({
       taskId,
@@ -200,7 +196,7 @@ function collectMDSpoolBlocks(
     return result;
   }
   if ('children' in node) {
-    for (const child of node.children) collectMDSpoolBlocks(source, child, result);
+    for (const child of node.children) collectSpoolBlocks(source, child, result);
   }
   return result;
 }
@@ -259,7 +255,7 @@ function firstLineTask(
   };
 }
 
-function directMDSpoolBlocks(item: ListItem, blocks: readonly MDSpoolBlock[]): MDSpoolBlock[] {
+function directSpoolBlocks(item: ListItem, blocks: readonly SpoolBlock[]): SpoolBlock[] {
   const directCodeSpans = item.children.flatMap((child) => {
     const start = offsetOf(child, 'start');
     const end = offsetOf(child, 'end');
@@ -324,8 +320,8 @@ export function scanNote(source: string, options: NoteScanOptions): NoteScan {
   const parseSource = source.startsWith('\uFEFF') ? ` ${source.slice(1)}` : source;
   const root = unified().use(remarkParse).use(remarkGfm).parse(parseSource);
   const codeSpans = collectCodeSpans(root);
-  const mdspoolBlocks = collectMDSpoolBlocks(source, root);
-  const embeddedMarkers: IdentityMarker[] = mdspoolBlocks.flatMap((block) =>
+  const spoolBlocks = collectSpoolBlocks(source, root);
+  const embeddedMarkers: IdentityMarker[] = spoolBlocks.flatMap((block) =>
     block.taskId && block.anchor
       ? [
           {
@@ -359,7 +355,7 @@ export function scanNote(source: string, options: NoteScanOptions): NoteScan {
 
     const directive = matchProviderDirective(task.taskText, configured);
     if (!directive) return;
-    const ownBlocks = directMDSpoolBlocks(item, mdspoolBlocks);
+    const ownBlocks = directSpoolBlocks(item, spoolBlocks);
     const ownEmbeddedMarkers = embeddedMarkers.filter((marker) =>
       ownBlocks.some((block) => marker.start === block.start && marker.end === block.end),
     );
@@ -367,7 +363,7 @@ export function scanNote(source: string, options: NoteScanOptions): NoteScan {
     if (ownBlocks.some((block) => block.taskId === null || block.anchor === null)) {
       conflicts.push({
         kind: 'malformed-marker',
-        message: 'An MDSpool receipt is missing a valid Task or Anchor header.',
+        message: 'A spool receipt is missing a valid Task or Anchor header.',
         span: { start: itemStart, end: itemEnd },
       });
     }

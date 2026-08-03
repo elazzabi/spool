@@ -310,7 +310,7 @@ function acquireConfigLock(lockPath: string): number {
       if (!isNodeError(error, 'EEXIST')) throw error;
       if (attempt === 0 && reclaimStaleConfigLock(lockPath)) continue;
       throw new ConfigDocumentError(
-        `Another MDSpool configuration update owns ${lockPath}; retry after it finishes`,
+        `Another spool configuration update owns ${lockPath}; retry after it finishes`,
       );
     }
   }

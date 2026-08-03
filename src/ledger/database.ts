@@ -10,7 +10,7 @@ export class LedgerOpenError extends Error {
 
   constructor(databasePath: string, cause: unknown) {
     const detail = cause instanceof Error ? cause.message : String(cause);
-    super(`Cannot safely open MDSpool ledger at ${databasePath}: ${detail}`);
+    super(`Cannot safely open spool ledger at ${databasePath}: ${detail}`);
     this.name = 'LedgerOpenError';
     this.cause = cause;
   }
@@ -24,7 +24,7 @@ export class LedgerDatabase {
 
   constructor(stateDirectory: string, database: Database.Database) {
     this.stateDirectory = stateDirectory;
-    this.databasePath = path.join(stateDirectory, 'mdspool.sqlite');
+    this.databasePath = path.join(stateDirectory, 'spool.sqlite');
     this.raw = database;
   }
 
@@ -52,7 +52,7 @@ export class LedgerDatabase {
 export function openLedgerDatabase(stateDirectory: string): LedgerDatabase {
   mkdirSync(stateDirectory, { recursive: true, mode: 0o700 });
   chmodSync(stateDirectory, 0o700);
-  const databasePath = path.join(stateDirectory, 'mdspool.sqlite');
+  const databasePath = path.join(stateDirectory, 'spool.sqlite');
   for (const child of ['logs', 'tmp']) {
     const directory = path.join(stateDirectory, child);
     mkdirSync(directory, { recursive: true, mode: 0o700 });
@@ -86,7 +86,7 @@ function enforceStatePermissions(stateDirectory: string): void {
     if (existsSync(directory)) chmodSync(directory, 0o700);
   }
   for (const suffix of ['', '-wal', '-shm']) {
-    const file = path.join(stateDirectory, `mdspool.sqlite${suffix}`);
+    const file = path.join(stateDirectory, `spool.sqlite${suffix}`);
     if (existsSync(file)) chmodSync(file, 0o600);
   }
 }

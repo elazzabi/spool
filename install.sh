@@ -2,17 +2,17 @@
 
 set -u
 
-PROGRAM=mdspool-installer
+PROGRAM=spool-installer
 VERSION=
 PREFIX=
 PREFIX_SUPPLIED=0
-RELEASES_URL=${MDSPOOL_RELEASE_BASE_URL:-https://github.com/elazzabi/mdspool/releases}
+RELEASES_URL=${SPOOL_RELEASE_BASE_URL:-https://github.com/elazzabi/spool/releases}
 
 usage() {
   cat <<'EOF'
 Usage: install.sh [--version X.Y.Z] [--prefix PATH]
 
-Install the latest stable MDSpool release, or an exact stable version, without npm.
+Install the latest stable spool release, or an exact stable version, without npm.
 EOF
 }
 
@@ -74,14 +74,14 @@ NODE_ABI=$(node -p "process.versions.modules") || fail "could not inspect Node A
 PLATFORM=$(node -p "process.platform") || fail "could not inspect operating system"
 ARCHITECTURE=$(node -p "process.arch") || fail "could not inspect architecture"
 
-[ "$NODE_MAJOR" = 24 ] || fail "unsupported Node major $NODE_MAJOR; MDSpool requires Node 24"
-[ "$NODE_ABI" = 137 ] || fail "unsupported Node ABI $NODE_ABI; MDSpool requires ABI 137"
+[ "$NODE_MAJOR" = 24 ] || fail "unsupported Node major $NODE_MAJOR; spool requires Node 24"
+[ "$NODE_ABI" = 137 ] || fail "unsupported Node ABI $NODE_ABI; spool requires ABI 137"
 case "$PLATFORM-$ARCHITECTURE" in
   darwin-x64|darwin-arm64|linux-x64|linux-arm64) ;;
   *) fail "unsupported runtime tuple: $PLATFORM-$ARCHITECTURE" ;;
 esac
 
-TEMPORARY_ROOT=$(mktemp -d "${TMPDIR:-/tmp}/mdspool-install.XXXXXX") ||
+TEMPORARY_ROOT=$(mktemp -d "${TMPDIR:-/tmp}/spool-install.XXXXXX") ||
   fail "could not create temporary directory"
 cleanup() {
   rm -rf "$TEMPORARY_ROOT"
@@ -125,7 +125,7 @@ for (const artifact of manifest.artifacts) {
   if (artifact.nodeMajor !== 24 || artifact.nodeAbi !== 137) {
     throw new Error(`invalid Node contract for ${tuple}`);
   }
-  const expected = `mdspool-v${manifest.version}-node24-abi137-${tuple}.tar.gz`;
+  const expected = `spool-v${manifest.version}-node24-abi137-${tuple}.tar.gz`;
   if (artifact.filename !== expected || !/^[A-Za-z0-9._-]+$/.test(artifact.filename)) {
     throw new Error(`invalid artifact filename for ${tuple}`);
   }
@@ -183,8 +183,8 @@ set -- install \
   --release-source "$ASSET_BASE" \
   --artifact-digest "$ARTIFACT_DIGEST" \
   --node-abi "$NODE_ABI"
-if [ -n "${MDSPOOL_CONFIG_PATH:-}" ]; then
-  set -- "$@" --config "$MDSPOOL_CONFIG_PATH"
+if [ -n "${SPOOL_CONFIG_PATH:-}" ]; then
+  set -- "$@" --config "$SPOOL_CONFIG_PATH"
 fi
 
 node "$MANAGED_INSTALL" "$@"

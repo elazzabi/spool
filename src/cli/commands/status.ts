@@ -1,4 +1,4 @@
-import type { MDSpoolConfig } from '../../config/schema.js';
+import type { SpoolConfig } from '../../config/schema.js';
 import { openLedgerDatabase } from '../../ledger/database.js';
 import { LedgerRepository } from '../../ledger/repositories.js';
 import { sanitizeTerminalText, type StaticCliPresenter } from '../output.js';
@@ -26,7 +26,7 @@ export interface DurableStatusReport {
   }>;
 }
 
-export function collectStatus(config: MDSpoolConfig): DurableStatusReport {
+export function collectStatus(config: SpoolConfig): DurableStatusReport {
   const database = openLedgerDatabase(config.stateDirectory);
   try {
     const ledger = new LedgerRepository(database);
@@ -79,7 +79,7 @@ export function presentStatusReport(
   report: DurableStatusReport,
   presenter: StaticCliPresenter,
 ): void {
-  presenter.intro('MDSpool status');
+  presenter.intro('spool status');
   presenter.section('Jobs', jobLines(report.jobs));
   presenter.section('Workspaces', workspaceLines(report.leases));
   presenter.outro('Status inspection complete');

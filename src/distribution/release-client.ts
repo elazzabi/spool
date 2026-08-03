@@ -62,7 +62,7 @@ export async function acquireRelease(request: ReleaseAcquisitionRequest): Promis
     : `${request.releaseBaseUrl}/latest/download`;
   const manifest = await fetchJson(`${releaseSource}/release-manifest.json`);
   const artifact = validateManifest(manifest, runtime, exactVersion);
-  const temporaryRoot = mkdtempSync(path.join(tmpdir(), 'mdspool-update-'));
+  const temporaryRoot = mkdtempSync(path.join(tmpdir(), 'spool-update-'));
   try {
     const archivePath = path.join(temporaryRoot, artifact.filename);
     const archive = await fetchBuffer(
@@ -224,7 +224,7 @@ function artifactDescriptor(value: unknown, version: string) {
     nodeMajor !== 24 ||
     nodeAbi !== 137 ||
     typeof filename !== 'string' ||
-    filename !== `mdspool-v${version}-node24-abi137-${platform}-${architecture}.tar.gz` ||
+    filename !== `spool-v${version}-node24-abi137-${platform}-${architecture}.tar.gz` ||
     typeof sha256 !== 'string' ||
     !/^[0-9a-f]{64}$/.test(sha256) ||
     !Number.isSafeInteger(size) ||

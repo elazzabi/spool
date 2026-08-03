@@ -2,7 +2,7 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 
 import { deepestContainingDirectory } from '../config/paths.js';
-import type { MDSpoolConfig } from '../config/schema.js';
+import type { SpoolConfig } from '../config/schema.js';
 import type { Job } from '../domain/job.js';
 import type { LedgerRepository } from '../ledger/repositories.js';
 import type { OutboxRepository } from '../ledger/outbox.js';
@@ -47,13 +47,13 @@ export interface ProjectionDeliveryResult {
 }
 
 export class NoteProjector {
-  readonly #config: MDSpoolConfig;
+  readonly #config: SpoolConfig;
   readonly #ledger: LedgerRepository;
   readonly #outbox: OutboxRepository;
   readonly #now: () => Date;
 
   constructor(options: {
-    config: MDSpoolConfig;
+    config: SpoolConfig;
     ledger: LedgerRepository;
     outbox: OutboxRepository;
     now?: () => Date;
@@ -197,7 +197,7 @@ export class NoteProjector {
   }
 }
 
-export function providerDirectives(config: MDSpoolConfig): Record<string, string> {
+export function providerDirectives(config: SpoolConfig): Record<string, string> {
   return Object.fromEntries(
     config.providers
       .filter((provider) => provider.enabled)
@@ -209,7 +209,7 @@ async function currentDayHeading(
   notePath: string,
   now: Date,
   timeZone: string,
-  aliases: MDSpoolConfig['dayAliases'],
+  aliases: SpoolConfig['dayAliases'],
 ): Promise<string | null> {
   let source: string;
   try {
@@ -220,7 +220,7 @@ async function currentDayHeading(
   }
   const canonical = new Intl.DateTimeFormat('en-US', { weekday: 'long', timeZone })
     .format(now)
-    .toLowerCase() as keyof MDSpoolConfig['dayAliases'];
+    .toLowerCase() as keyof SpoolConfig['dayAliases'];
   const candidates = [
     ...new Map(
       [canonical, ...(aliases[canonical] ?? [])].map((candidate) => [

@@ -1,7 +1,7 @@
 import type Database from 'better-sqlite3';
 
 export const CURRENT_SCHEMA_VERSION = 1;
-export const MDSPOOL_APPLICATION_ID = 0x4d445350;
+export const SPOOL_APPLICATION_ID = 0x4d445350;
 
 export class SchemaValidationError extends Error {
   constructor(message: string) {
@@ -168,7 +168,7 @@ export function initializeOrValidateSchema(database: Database.Database): void {
     try {
       database.exec(schemaV1);
       database.pragma(`user_version = ${CURRENT_SCHEMA_VERSION}`);
-      database.pragma(`application_id = ${MDSPOOL_APPLICATION_ID}`);
+      database.pragma(`application_id = ${SPOOL_APPLICATION_ID}`);
       database.exec('COMMIT');
     } catch (error) {
       database.exec('ROLLBACK');
@@ -176,7 +176,7 @@ export function initializeOrValidateSchema(database: Database.Database): void {
     }
   } else if (version !== CURRENT_SCHEMA_VERSION) {
     const description =
-      version > CURRENT_SCHEMA_VERSION ? 'newer than this MDSpool build' : 'unknown or unversioned';
+      version > CURRENT_SCHEMA_VERSION ? 'newer than this spool build' : 'unknown or unversioned';
     throw new SchemaValidationError(
       `Ledger schema version ${String(version)} is ${description}; expected ${String(CURRENT_SCHEMA_VERSION)}`,
     );
@@ -200,9 +200,9 @@ export function initializeOrValidateSchema(database: Database.Database): void {
   }
 
   const applicationId = database.pragma('application_id', { simple: true }) as number;
-  if (applicationId !== MDSPOOL_APPLICATION_ID) {
+  if (applicationId !== SPOOL_APPLICATION_ID) {
     throw new SchemaValidationError(
-      `Ledger application id ${String(applicationId)} does not identify an MDSpool database`,
+      `Ledger application id ${String(applicationId)} does not identify a spool database`,
     );
   }
 

@@ -30,7 +30,7 @@ import type { GitRunner } from '../../src/workspaces/git.js';
 describe('friendly onboarding wizard', () => {
   it('explains how to inspect and update an existing default configuration', async () => {
     const root = createTemporaryRoot();
-    const configPath = path.join(root, 'mdspool', 'config.yaml');
+    const configPath = path.join(root, 'spool', 'config.yaml');
     const prompter = new ScriptedPrompter();
     mkdirSync(path.dirname(configPath), { recursive: true });
     writeFileSync(configPath, 'existing configuration');
@@ -122,7 +122,7 @@ describe('friendly onboarding wizard', () => {
     expect(prompter.outros.at(-1)).toContain('Enabled: Codex');
     expect(prompter.outros.at(-1)).toContain('Intentionally disabled: Claude');
     expect(prompter.outros.at(-1)).toContain('Unavailable: Cursor (not logged in)');
-    expect(prompter.outros.at(-1)).toContain('Start MDSpool with:');
+    expect(prompter.outros.at(-1)).toContain('Start spool with:');
     expect(prompter.outros.at(-1)).toContain('  spool daemon');
     expect(prompter.outros.at(-1)).not.toContain('spool --config');
     expect(prompter.closed).toBe(true);
@@ -190,7 +190,7 @@ describe('friendly onboarding wizard', () => {
       select: vi.fn((options: Parameters<ClackBindings['select']>[0]) => {
         const { message } = options;
         return Promise.resolve(
-          message === 'How would you like to set up MDSpool?'
+          message === 'How would you like to set up spool?'
             ? 'quickstart'
             : message === 'Codex access profile'
               ? 'unrestricted'
@@ -260,7 +260,7 @@ describe('friendly onboarding wizard', () => {
     expect(result.daemonCommand).toBe(`spool --config ${fixture.configPath} daemon`);
     expect(prompter.textMessages.every((message) => !message.includes('flags'))).toBe(true);
     expect(prompter.selectMessages).toEqual([
-      'How would you like to set up MDSpool?',
+      'How would you like to set up spool?',
       'Claude access profile',
       'Additional arguments for Claude?',
       'Codex access profile',
@@ -388,9 +388,7 @@ describe('friendly onboarding wizard', () => {
       ({ message }) => message === 'Pi access profile',
     );
     expect(piProfile?.values).toEqual(['recommended', 'custom-only']);
-    expect(piPrompter.notes.filter(({ message }) => /MDSpool-managed/.test(message))).toHaveLength(
-      3,
-    );
+    expect(piPrompter.notes.filter(({ message }) => /spool-managed/.test(message))).toHaveLength(3);
     expect(
       loadConfig(piFixture.configPath, { pathValue: piFixture.bin }).providers.find(
         ({ name }) => name === 'pi',
@@ -526,7 +524,7 @@ describe('friendly onboarding wizard', () => {
       'Project folder agents may work in',
     ]);
     expect(prompter.notes.find(({ title }) => title === 'Agent workspace')?.message).toBe(
-      'Choose an existing project folder on this computer. It must be a Git checkout with a GitHub origin. MDSpool makes the folder available to selected agents; it does not clone repositories or clean local changes.',
+      'Choose an existing project folder on this computer. It must be a Git checkout with a GitHub origin. spool makes the folder available to selected agents; it does not clone repositories or clean local changes.',
     );
     expect(prompter.notes.some(({ title }) => title === 'Agent status changed')).toBe(true);
   });
@@ -642,7 +640,7 @@ describe('friendly onboarding wizard', () => {
     expect(review).toContain('Enabled: Pi');
     expect(review).toContain('0.75.0 differs from validated baseline 0.74.2');
     expect(prompter.notes.find(({ title }) => title === 'Agent workspace')?.message).toBe(
-      'Choose an existing project folder on this computer. It must be a Git checkout with a GitHub origin. MDSpool makes the folder available to selected agents; it does not clone repositories or clean local changes.',
+      'Choose an existing project folder on this computer. It must be a Git checkout with a GitHub origin. spool makes the folder available to selected agents; it does not clone repositories or clean local changes.',
     );
   });
 
@@ -1014,5 +1012,5 @@ function createFixture(): {
 }
 
 function createTemporaryRoot(): string {
-  return realpathSync(mkdtempSync(path.join(tmpdir(), 'mdspool-init-')));
+  return realpathSync(mkdtempSync(path.join(tmpdir(), 'spool-init-')));
 }

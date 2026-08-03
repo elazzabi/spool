@@ -83,13 +83,13 @@ export async function runInit(options: RunInitOptions = {}): Promise<InitOutcome
   const prompter =
     options.prompter ?? (options.plain ? new PlainSetupPrompter() : new ClackSetupPrompter());
   try {
-    prompter.intro('MDSpool setup');
+    prompter.intro('spool setup');
     prompter.note(
-      'Choose the local agents MDSpool may run. Authentication stays with each agent CLI.',
+      'Choose the local agents spool may run. Authentication stays with each agent CLI.',
       'Welcome',
     );
     const mode = await prompter.select<SetupMode>(
-      'How would you like to set up MDSpool?',
+      'How would you like to set up spool?',
       [
         { value: 'quickstart', label: 'QuickStart', hint: 'Recommended defaults' },
         { value: 'advanced', label: 'Advanced', hint: 'Customize storage and polling' },
@@ -267,7 +267,7 @@ export function formatInitResult(result: InitResult): string {
     '',
     formatDoctorReport(result.doctor),
     '',
-    'Start MDSpool with:',
+    'Start spool with:',
     `  ${result.daemonCommand}`,
   ].join('\n');
 }
@@ -301,7 +301,7 @@ async function selectAgents(
   let initial = initialValues;
   while (true) {
     const selected = await prompter.multiselect(
-      'Which agents should MDSpool enable?',
+      'Which agents should spool enable?',
       statuses.map<PromptOption<BuiltinProviderName>>((status) => ({
         value: status.definition.name,
         label: displayName(status.definition.name),
@@ -353,7 +353,7 @@ async function collectRepositories(
 ): Promise<RawConfig['repositories']> {
   const repositories: RawConfig['repositories'] = [];
   prompter.note(
-    'Choose an existing project folder on this computer. It must be a Git checkout with a GitHub origin. MDSpool makes the folder available to selected agents; it does not clone repositories or clean local changes.',
+    'Choose an existing project folder on this computer. It must be a Git checkout with a GitHub origin. spool makes the folder available to selected agents; it does not clone repositories or clean local changes.',
     'Agent workspace',
   );
   await collectDirectories(

@@ -26,14 +26,14 @@ describe('compilePromptContext', () => {
   });
 
   it('includes repository context without inventing pull-request context', () => {
-    const source = '- [ ] Update README https://github.com/elazzabi/mdspool @codex';
+    const source = '- [ ] Update README https://github.com/elazzabi/spool @codex';
     const directive = scanNote(source, { providers: { codex: '@codex' } }).directives[0];
 
     expect(directive).toBeDefined();
     expect(compilePromptContext(directive!)).toBe(
       [
-        'Repository (direct): elazzabi/mdspool',
-        'Instruction (direct): Update README https://github.com/elazzabi/mdspool',
+        'Repository (direct): elazzabi/spool',
+        'Instruction (direct): Update README https://github.com/elazzabi/spool',
       ].join('\n'),
     );
   });

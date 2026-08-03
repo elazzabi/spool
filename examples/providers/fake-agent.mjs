@@ -42,9 +42,9 @@ switch (scenario) {
         argv: args,
         cwd: process.cwd(),
         env: {
-          allowed: process.env.MDSPOOL_ALLOWED_FOR_TEST,
-          explicit: process.env.MDSPOOL_EXPLICIT_FOR_TEST,
-          notAllowed: process.env.MDSPOOL_NOT_ALLOWED_FOR_TEST,
+          allowed: process.env.SPOOL_ALLOWED_FOR_TEST,
+          explicit: process.env.SPOOL_EXPLICIT_FOR_TEST,
+          notAllowed: process.env.SPOOL_NOT_ALLOWED_FOR_TEST,
         },
         promptBase64: prompt.toString('base64'),
       }),

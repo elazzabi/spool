@@ -62,7 +62,7 @@ export function quarantineDetail(
     summary,
     differences: compareWorkspaceFingerprints(baseline, inspection.fingerprint),
     safetyReasons: inspection.reasons,
-    humanAction: `Inspect ${baseline.canonicalWorkspace}, make it safe without asking MDSpool to clean it, then acknowledge the quarantine.`,
+    humanAction: `Inspect ${baseline.canonicalWorkspace}, make it safe without asking spool to clean it, then acknowledge the quarantine.`,
   };
 }
 

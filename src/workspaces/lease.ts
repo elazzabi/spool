@@ -8,7 +8,7 @@ import { promisify } from 'node:util';
 import type { WorkspaceFingerprint } from './git.js';
 
 const execFileAsync = promisify(execFile);
-export const WORKSPACE_SENTINEL_NAME = 'mdspool-workspace-lease.json';
+export const WORKSPACE_SENTINEL_NAME = 'spool-workspace-lease.json';
 const MAX_SENTINEL_BYTES = 1024 * 1024;
 
 export interface ProcessBirthIdentity {
@@ -174,7 +174,7 @@ export class WorkspaceSentinelManager {
     if (expected.ownerNonce !== this.ownerNonce) {
       return {
         valid: false,
-        reason: 'Workspace sentinel is not owned by this MDSpool process',
+        reason: 'Workspace sentinel is not owned by this spool process',
         payload: expected,
       };
     }

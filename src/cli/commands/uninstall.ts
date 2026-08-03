@@ -47,8 +47,7 @@ export async function runManagedUninstall(
     return {
       status: 'unmanaged',
       exitCode: 1,
-      message:
-        'This MDSpool executable is not owned by the GitHub installer; no files were removed.',
+      message: 'This spool executable is not owned by the GitHub installer; no files were removed.',
     };
   }
   try {
@@ -72,7 +71,7 @@ export async function runManagedUninstall(
       status: 'failed-preserved',
       exitCode: 1,
       version: ownership.version,
-      message: `Uninstall refused; managed MDSpool ${ownership.version} remains active: ${message}`,
+      message: `Uninstall refused; managed spool ${ownership.version} remains active: ${message}`,
     };
   }
 }

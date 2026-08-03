@@ -175,7 +175,7 @@ describe('provider setup configuration', () => {
         new Set(['pi']),
         new Map([['pi', { profile: 'custom-only', extraArgs: ['--tools=all'] }]]),
       ),
-    ).toThrow(/MDSpool-managed/i);
+    ).toThrow(/spool-managed/i);
   });
 
   it.each([
@@ -204,7 +204,7 @@ describe('provider setup configuration', () => {
 
       expect(() =>
         assertProviderArgumentChoice(definition, { profile: 'custom-only', extraArgs: args }),
-      ).toThrow(/MDSpool-managed/i);
+      ).toThrow(/spool-managed/i);
     },
   );
 
@@ -390,7 +390,7 @@ describe('provider setup configuration', () => {
   });
 
   it('reports a missing executable without launching a probe', async () => {
-    const root = mkdtempSync(path.join(tmpdir(), 'mdspool-config-missing-'));
+    const root = mkdtempSync(path.join(tmpdir(), 'spool-config-missing-'));
     const bin = path.join(root, 'bin');
     mkdirSync(bin);
     const runner = vi.fn<ProviderProbeRunner>();
@@ -757,7 +757,7 @@ function versionFor(provider: BuiltinProviderName): string {
 }
 
 function createExecutableFixture(): { bin: string } {
-  const root = mkdtempSync(path.join(tmpdir(), 'mdspool-config-setup-'));
+  const root = mkdtempSync(path.join(tmpdir(), 'spool-config-setup-'));
   const bin = path.join(root, 'bin');
   mkdirSync(bin);
   for (const executable of ['claude', 'codex', 'cursor-agent', 'pi']) {
@@ -816,7 +816,7 @@ function createSetupFixture(): {
   state: string;
   raw: RawConfig;
 } {
-  const root = realpathSync(mkdtempSync(path.join(tmpdir(), 'mdspool-setup-publish-')));
+  const root = realpathSync(mkdtempSync(path.join(tmpdir(), 'spool-setup-publish-')));
   const vault = path.join(root, 'vault');
   const clone = path.join(root, 'clone');
   const state = path.join(root, 'setup-state', 'state');
@@ -846,7 +846,7 @@ function createSetupFixture(): {
 }
 
 function createRepositoryFixture(names: readonly string[]): { root: string; clones: string[] } {
-  const root = realpathSync(mkdtempSync(path.join(tmpdir(), 'mdspool-repository-setup-')));
+  const root = realpathSync(mkdtempSync(path.join(tmpdir(), 'spool-repository-setup-')));
   const clones = names.map((name) => path.join(root, name));
   for (const clone of clones) mkdirSync(clone);
   return { root, clones };

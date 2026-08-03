@@ -14,7 +14,7 @@ import {
 const openDatabases: LedgerDatabase[] = [];
 
 function fixture(): { stateDirectory: string; ledger: LedgerRepository; database: LedgerDatabase } {
-  const stateDirectory = mkdtempSync(path.join(tmpdir(), 'mdspool-ledger-'));
+  const stateDirectory = mkdtempSync(path.join(tmpdir(), 'spool-ledger-'));
   const database = openLedgerDatabase(stateDirectory);
   openDatabases.push(database);
   return { stateDirectory, database, ledger: new LedgerRepository(database) };
@@ -349,14 +349,14 @@ describe('ledger repository', () => {
     ]) {
       expect(statSync(item).mode & 0o777).toBe(0o700);
     }
-    expect(statSync(path.join(stateDirectory, 'mdspool.sqlite')).mode & 0o777).toBe(0o600);
+    expect(statSync(path.join(stateDirectory, 'spool.sqlite')).mode & 0o777).toBe(0o600);
 
     // The opener restores restrictive permissions if an existing DB was loosened.
-    chmodSync(path.join(stateDirectory, 'mdspool.sqlite'), 0o644);
+    chmodSync(path.join(stateDirectory, 'spool.sqlite'), 0o644);
     database.close();
     openDatabases.splice(openDatabases.indexOf(database), 1);
     const reopened = openLedgerDatabase(stateDirectory);
     openDatabases.push(reopened);
-    expect(statSync(path.join(stateDirectory, 'mdspool.sqlite')).mode & 0o777).toBe(0o600);
+    expect(statSync(path.join(stateDirectory, 'spool.sqlite')).mode & 0o777).toBe(0o600);
   });
 });

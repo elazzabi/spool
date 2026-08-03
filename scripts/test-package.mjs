@@ -9,7 +9,7 @@ export const PACKAGE_REQUIRED_FILES = Object.freeze([
   'LICENSE.md',
   'README.md',
   PACKAGE_CLI_PATH,
-  'examples/mdspool.config.yaml',
+  'examples/spool.config.yaml',
   'examples/providers/fake-agent.mjs',
   'package.json',
 ]);
@@ -49,8 +49,8 @@ export function verifyContributorOnlyMetadata(manifest) {
   if (manifest.publishConfig || manifest.scripts?.prepack || manifest.scripts?.prepublishOnly) {
     throw new Error('Registry publication metadata is not allowed');
   }
-  if (manifest.bin?.spool !== PACKAGE_CLI_PATH || manifest.bin?.mdspool !== PACKAGE_CLI_PATH) {
-    throw new Error('Both runtime aliases must target the compiled CLI');
+  if (manifest.bin?.spool !== PACKAGE_CLI_PATH) {
+    throw new Error('The runtime executable must target the compiled CLI');
   }
 }
 

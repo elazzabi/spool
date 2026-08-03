@@ -9,7 +9,7 @@ import { runProviderProcess } from '../../src/providers/process-runner.js';
 
 describe('fake provider', () => {
   it('drives two distinct needs-input episodes across resumptions, then completes', async () => {
-    const root = mkdtempSync(path.join(tmpdir(), 'mdspool-fake-provider-'));
+    const root = mkdtempSync(path.join(tmpdir(), 'spool-fake-provider-'));
     const statePath = path.join(root, 'state.json');
     const provider = new FakeProvider({ executable: process.execPath });
     const states: string[] = [];
@@ -40,7 +40,7 @@ describe('fake provider', () => {
     ['fail', 'failed'],
     ['truncated', 'unproven'],
   ] as const)('maps the %s script to %s', async (scenario, expected) => {
-    const root = mkdtempSync(path.join(tmpdir(), 'mdspool-fake-provider-'));
+    const root = mkdtempSync(path.join(tmpdir(), 'spool-fake-provider-'));
     const logPath = path.join(root, 'attempt.log');
     closeSync(openSync(logPath, 'wx', 0o600));
     const provider = new FakeProvider({ executable: process.execPath });

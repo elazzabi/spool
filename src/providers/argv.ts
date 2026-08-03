@@ -50,7 +50,7 @@ export function assertAllowedProviderArgv(
   const reserved = new Set(policy.reservedArgs.map(normalizeComparableArg));
   for (const arg of args) {
     if (reserved.has(normalizeComparableArg(arg))) {
-      throw new Error('Custom provider arguments must not replace MDSpool-managed lifecycle flags');
+      throw new Error('Custom provider arguments must not replace spool-managed lifecycle flags');
     }
   }
 

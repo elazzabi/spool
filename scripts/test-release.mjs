@@ -30,7 +30,6 @@ const requiredFiles = [
   'dist/cli/index.js',
   'dist/distribution/managed-install.js',
   'bin/spool',
-  'bin/mdspool',
 ];
 const allowedRootEntries = new Set([
   'LICENSE.md',
@@ -98,7 +97,7 @@ export function verifyReleaseManifest(manifestPath) {
 }
 
 export function smokeTestReleaseArtifact(archivePath, runtimePath = process.execPath) {
-  const temporaryRoot = mkdtempSync(path.join(tmpdir(), 'mdspool-release-test-'));
+  const temporaryRoot = mkdtempSync(path.join(tmpdir(), 'spool-release-test-'));
   const extracted = path.join(temporaryRoot, 'extracted');
   const outside = path.join(temporaryRoot, 'outside');
   mkdirSync(outside);
@@ -124,7 +123,7 @@ export function smokeTestReleaseArtifact(archivePath, runtimePath = process.exec
       ...process.env,
       PATH: `${path.dirname(runtimePath)}${path.delimiter}${process.env.PATH ?? ''}`,
     };
-    for (const alias of ['spool', 'mdspool']) {
+    for (const alias of ['spool']) {
       const result = spawnSync(path.join(extracted, 'bin', alias), ['--version'], {
         cwd: outside,
         encoding: 'utf8',
@@ -160,7 +159,7 @@ export function smokeTestReleaseArtifact(archivePath, runtimePath = process.exec
 }
 
 export function smokeTestDaemonLockRefusal(archivePath, runtimePath = process.execPath) {
-  const temporaryRoot = mkdtempSync(path.join(tmpdir(), 'mdspool-release-lock-test-'));
+  const temporaryRoot = mkdtempSync(path.join(tmpdir(), 'spool-release-lock-test-'));
   const extracted = path.join(temporaryRoot, 'extracted');
   const helperPath = path.join(temporaryRoot, 'daemon-lock-smoke.mjs');
   try {
@@ -172,8 +171,8 @@ import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
-const extracted = process.env.MDSPOOL_SMOKE_EXTRACTED;
-const root = process.env.MDSPOOL_SMOKE_ROOT;
+const extracted = process.env.SPOOL_SMOKE_EXTRACTED;
+const root = process.env.SPOOL_SMOKE_ROOT;
 if (!extracted || !root) throw new Error('Missing release smoke environment');
 const load = (entry) => import(pathToFileURL(path.join(extracted, entry)).href);
 const { openLedgerDatabase } = await load('dist/ledger/database.js');
@@ -194,7 +193,7 @@ try {
   if (result.status !== 1 || !result.stderr.includes(\`kill \${process.pid}\`)) {
     throw new Error(\`Managed installer did not refuse the active daemon lock:\\n\${result.stdout}\\n\${result.stderr}\`);
   }
-  if (existsSync(path.join(prefix, 'lib/mdspool/current'))) throw new Error('Daemon-lock refusal changed the active installation');
+  if (existsSync(path.join(prefix, 'lib/spool/current'))) throw new Error('Daemon-lock refusal changed the active installation');
 } finally {
   lock.release(owner);
   database.close();
@@ -205,8 +204,8 @@ try {
       encoding: 'utf8',
       env: {
         ...process.env,
-        MDSPOOL_SMOKE_EXTRACTED: extracted,
-        MDSPOOL_SMOKE_ROOT: temporaryRoot,
+        SPOOL_SMOKE_EXTRACTED: extracted,
+        SPOOL_SMOKE_ROOT: temporaryRoot,
       },
     });
     if (result.status !== 0) {
@@ -246,7 +245,7 @@ function verifyArchiveContents(archivePath, artifact, version) {
       throw new Error(`Release archive contains development-only file: ${entry.path}`);
     }
   }
-  for (const executable of ['dist/cli/index.js', 'bin/spool', 'bin/mdspool']) {
+  for (const executable of ['dist/cli/index.js', 'bin/spool']) {
     if ((entries.get(executable).mode & 0o111) === 0) {
       throw new Error(`Release runtime file is not executable: ${executable}`);
     }

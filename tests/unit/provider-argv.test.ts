@@ -53,7 +53,7 @@ describe('provider argv safety', () => {
     [['-p']],
     [['-']],
   ])('rejects adapter-owned arguments in paired, inline, short, and positional forms', (args) => {
-    expect(() => assertAllowedProviderArgv(args, policy)).toThrow(/MDSpool-managed/i);
+    expect(() => assertAllowedProviderArgv(args, policy)).toThrow(/spool-managed/i);
   });
 
   it.each([

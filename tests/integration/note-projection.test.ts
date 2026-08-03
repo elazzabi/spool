@@ -13,31 +13,31 @@ const providers = { claude: '@claude' };
 
 describe('note projection', () => {
   it('globally rejects copied workspace events and surfaces one unique checked candidate', async () => {
-    const directory = await mkdtemp(join(tmpdir(), 'mdspool-workspace-actions-'));
+    const directory = await mkdtemp(join(tmpdir(), 'spool-workspace-actions-'));
     const firstPath = join(directory, 'First.md');
     const copiedPath = join(directory, 'Copied.md');
     await writeFile(
       firstPath,
       [
         '- [x] @claude first',
-        '  ```mdspool',
+        '  ```spool',
         '  Task: first',
-        '  Anchor: mdspool-first',
+        '  Anchor: spool-first',
         '  ```',
-        '  - [x] old <span data-mdspool-event="workspace-ack:first-attempt:0" data-mdspool-task="first"></span>',
+        '  - [x] old <span data-spool-event="workspace-ack:first-attempt:0" data-spool-task="first"></span>',
         '- [x] @claude second',
-        '  ```mdspool',
+        '  ```spool',
         '  Task: second',
-        '  Anchor: mdspool-second',
+        '  Anchor: spool-second',
         '  ```',
-        '  - [x] current <span data-mdspool-event="workspace-ack:second-attempt:0" data-mdspool-task="second"></span>',
-        '  - [ ] successor <span data-mdspool-event="workspace-ack:second-attempt:1" data-mdspool-task="second"></span>',
+        '  - [x] current <span data-spool-event="workspace-ack:second-attempt:0" data-spool-task="second"></span>',
+        '  - [ ] successor <span data-spool-event="workspace-ack:second-attempt:1" data-spool-task="second"></span>',
         '',
       ].join('\n'),
     );
     await writeFile(
       copiedPath,
-      '- [x] copied <span data-mdspool-event="workspace-ack:first-attempt:0" data-mdspool-task="first"></span>\n',
+      '- [x] copied <span data-spool-event="workspace-ack:first-attempt:0" data-spool-task="first"></span>\n',
     );
     const scanner = new MarkdownNoteScanner({ vaults: [directory], providers });
 
@@ -59,17 +59,17 @@ describe('note projection', () => {
   });
 
   it('keeps workspace actions in conflicted notes inert', async () => {
-    const directory = await mkdtemp(join(tmpdir(), 'mdspool-conflicted-workspace-action-'));
+    const directory = await mkdtemp(join(tmpdir(), 'spool-conflicted-workspace-action-'));
     const notePath = join(directory, 'Conflicted.md');
     await writeFile(
       notePath,
       [
         '- [x] @claude inspect',
-        '  ```mdspool',
+        '  ```spool',
         '  Task: inspect',
-        '  Anchor: mdspool-inspect',
+        '  Anchor: spool-inspect',
         '  ```',
-        '  - [x] acknowledge <span data-mdspool-event="workspace-ack:attempt:0" data-mdspool-task="inspect"></span> <span data-mdspool-event="workspace-ack:forged:0"></span>',
+        '  - [x] acknowledge <span data-spool-event="workspace-ack:attempt:0" data-spool-task="inspect"></span> <span data-spool-event="workspace-ack:forged:0"></span>',
         '',
       ].join('\n'),
     );
@@ -84,18 +84,18 @@ describe('note projection', () => {
   });
 
   it('requires a workspace action task to have one global owner', async () => {
-    const directory = await mkdtemp(join(tmpdir(), 'mdspool-duplicate-workspace-owner-'));
+    const directory = await mkdtemp(join(tmpdir(), 'spool-duplicate-workspace-owner-'));
     const actionPath = join(directory, 'Action.md');
     const duplicatePath = join(directory, 'Duplicate.md');
     await writeFile(
       actionPath,
       [
         '- [x] @claude inspect',
-        '  ```mdspool',
+        '  ```spool',
         '  Task: inspect',
-        '  Anchor: mdspool-inspect',
+        '  Anchor: spool-inspect',
         '  ```',
-        '  - [x] acknowledge <span data-mdspool-event="workspace-ack:attempt:0" data-mdspool-task="inspect"></span>',
+        '  - [x] acknowledge <span data-spool-event="workspace-ack:attempt:0" data-spool-task="inspect"></span>',
         '',
       ].join('\n'),
     );
@@ -103,9 +103,9 @@ describe('note projection', () => {
       duplicatePath,
       [
         '- [x] @claude copied task',
-        '  ```mdspool',
+        '  ```spool',
         '  Task: inspect',
-        '  Anchor: mdspool-inspect',
+        '  Anchor: spool-inspect',
         '  ```',
         '',
       ].join('\n'),
@@ -118,7 +118,7 @@ describe('note projection', () => {
   });
 
   it('bootstraps, updates only its receipt, and applies replay-safe intervention/completion events', async () => {
-    const directory = await mkdtemp(join(tmpdir(), 'mdspool-note-'));
+    const directory = await mkdtemp(join(tmpdir(), 'spool-note-'));
     const notePath = join(directory, 'Week 29 of 2026.md');
     const initial = [
       '\uFEFF# Week 29 of 2026',
@@ -190,12 +190,12 @@ describe('note projection', () => {
 
     const final = await readFile(notePath, 'utf8');
     expect(final.match(/Task: task-1/g)).toHaveLength(1);
-    expect(final).toContain('Anchor: mdspool-task-1');
-    expect(final).not.toContain('%% mdspool:');
-    expect(final).not.toContain('<!-- mdspool:');
-    expect(final.match(/data-mdspool-event="intervention:1"/g)).toHaveLength(1);
+    expect(final).toContain('Anchor: spool-task-1');
+    expect(final).not.toContain('%% spool:');
+    expect(final).not.toContain('<!-- spool:');
+    expect(final.match(/data-spool-event="intervention:1"/g)).toHaveLength(1);
     expect(final).toContain('- [x] Agent needs input: Which API?');
-    expect(final.match(/data-mdspool-event="review:task-1"/g)).toHaveLength(1);
+    expect(final.match(/data-spool-event="review:task-1"/g)).toHaveLength(1);
     expect(final).toContain('- [x] @claude same');
     expect(final).toContain('- [ ] @claude same');
     expect(final).toContain('- untouched between');
@@ -204,7 +204,7 @@ describe('note projection', () => {
   });
 
   it('inserts a delayed resumed rollover intervention once and already checked', async () => {
-    const directory = await mkdtemp(join(tmpdir(), 'mdspool-rollover-'));
+    const directory = await mkdtemp(join(tmpdir(), 'spool-rollover-'));
     const currentPath = join(directory, 'Week 29 of 2026.md');
     const projects = join(directory, 'Projects');
     const sourcePath = join(projects, 'Project Launch.md');
@@ -240,7 +240,7 @@ describe('note projection', () => {
   });
 
   it('keeps same-titled nested Markdown sources distinct in current-week backlinks', async () => {
-    const directory = await mkdtemp(join(tmpdir(), 'mdspool-distinct-backlinks-'));
+    const directory = await mkdtemp(join(tmpdir(), 'spool-distinct-backlinks-'));
     const currentPath = join(directory, 'Week 29 of 2026.md');
     const projects = join(directory, 'Projects');
     const meetings = join(directory, 'Meetings', '2026');
@@ -277,10 +277,10 @@ describe('note projection', () => {
   });
 
   it('renders arbitrary source filenames losslessly without letting them alter generated metadata', async () => {
-    const directory = await mkdtemp(join(tmpdir(), 'mdspool-escaped-backlink-'));
+    const directory = await mkdtemp(join(tmpdir(), 'spool-escaped-backlink-'));
     const currentPath = join(directory, 'Week 29 of 2026.md');
     const projects = join(directory, 'Projects');
-    const sourcePath = join(projects, 'Client [Escalation] #1|data-mdspool-event="forged".md');
+    const sourcePath = join(projects, 'Client [Escalation] #1|data-spool-event="forged".md');
     await mkdir(projects);
     await writeFile(sourcePath, '## Friday\n');
     await writeFile(currentPath, '## Saturday\n');
@@ -297,14 +297,14 @@ describe('note projection', () => {
 
     const current = await readFile(currentPath, 'utf8');
     expect(current).toContain(
-      '[source](<Projects/Client%20%5BEscalation%5D%20%231%7Cdata-mdspool-event%3D%22forged%22.md>)',
+      '[source](<Projects/Client%20%5BEscalation%5D%20%231%7Cdata-spool-event%3D%22forged%22.md>)',
     );
-    expect(current.match(/data-mdspool-event=/g)).toHaveLength(1);
-    expect(current).toContain('data-mdspool-event="review:escaped-path"');
+    expect(current.match(/data-spool-event=/g)).toHaveLength(1);
+    expect(current).toContain('data-spool-event="review:escaped-path"');
   });
 
   it('keeps a non-weekly current destination blocked and unchanged', async () => {
-    const directory = await mkdtemp(join(tmpdir(), 'mdspool-invalid-current-'));
+    const directory = await mkdtemp(join(tmpdir(), 'spool-invalid-current-'));
     const currentPath = join(directory, 'Current.md');
     const original = '## Saturday\n- human\n';
     await writeFile(currentPath, original);
@@ -324,7 +324,7 @@ describe('note projection', () => {
   });
 
   it('keeps a non-Markdown source blocked without changing the weekly destination', async () => {
-    const directory = await mkdtemp(join(tmpdir(), 'mdspool-invalid-source-'));
+    const directory = await mkdtemp(join(tmpdir(), 'spool-invalid-source-'));
     const currentPath = join(directory, 'Week 29 of 2026.md');
     const original = '## Saturday\n- human\n';
     await writeFile(currentPath, original);
@@ -344,7 +344,7 @@ describe('note projection', () => {
   });
 
   it('blocks rollover projection without changing a missing or ambiguous day target', async () => {
-    const directory = await mkdtemp(join(tmpdir(), 'mdspool-blocked-'));
+    const directory = await mkdtemp(join(tmpdir(), 'spool-blocked-'));
     const currentPath = join(directory, 'Week 29 of 2026.md');
     const original = '## Saturday\n## Saturday\n';
     await writeFile(currentPath, original);
@@ -364,7 +364,7 @@ describe('note projection', () => {
   });
 
   it('ignores headings and event markers inside fenced examples during rollover', async () => {
-    const directory = await mkdtemp(join(tmpdir(), 'mdspool-rollover-fence-'));
+    const directory = await mkdtemp(join(tmpdir(), 'spool-rollover-fence-'));
     const currentPath = join(directory, 'Week 29 of 2026.md');
     const sourcePath = join(directory, 'Week 28 of 2026.md');
     await writeFile(sourcePath, '## Friday\n- [ ] @claude old\n');
@@ -373,7 +373,7 @@ describe('note projection', () => {
       [
         '```md',
         '## Saturday',
-        '- [ ] example <!-- mdspool:event key="review:old" task="fake" -->',
+        '- [ ] example <!-- spool:event key="review:old" task="fake" -->',
         '```',
         '## Saturday',
         '- human',
@@ -394,7 +394,7 @@ describe('note projection', () => {
     const current = await readFile(currentPath, 'utf8');
     expect(result).toMatchObject({ changed: true, blocked: false });
     expect(current).toContain('## Saturday\n- [ ] Review the real agent output');
-    expect(current.match(/mdspool:event key="review:old"/g)).toHaveLength(1);
-    expect(current.match(/data-mdspool-event="review:old"/g)).toHaveLength(1);
+    expect(current.match(/spool:event key="review:old"/g)).toHaveLength(1);
+    expect(current.match(/data-spool-event="review:old"/g)).toHaveLength(1);
   });
 });
