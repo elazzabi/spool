@@ -1,0 +1,77 @@
+# `spool init` creates this document and the state directory for normal setup.
+# This file is the advanced/manual schema reference; create all paths first when
+# authoring it yourself, then replace the example vault, state, and clone paths.
+vaults:
+  - /Users/you/Documents/Obsidian
+stateDirectory: /Users/you/.local/state/mdspool
+timeZone: Europe/Istanbul
+pollIntervalSeconds: 30
+
+# Every regular .md file below a watched folder is an eligible source. The
+# current action destination keeps the exact Week <ISO week> of <year>.md name.
+dayAliases:
+  monday: [Monday, Mon]
+  tuesday: [Tuesday, Tue]
+  wednesday: [Wednesday, Wed]
+  thursday: [Thursday, Thu]
+  friday: [Friday, Fri]
+  saturday: [Saturday, Sat]
+  sunday: [Sunday, Sun]
+
+providers:
+  # defaultArgs are literal argv entries. Keep a flag and its value as separate
+  # array items. They also apply to inspect/resume commands. `spool init` rejects
+  # credentials, warned bypass aliases, and MDSpool-owned lifecycle arguments;
+  # manual YAML does not, so never place credentials here. Restart the daemon
+  # after changing provider arguments.
+  claude:
+    enabled: true
+    executable: claude
+    directive: '@claude'
+    # Recommended: proposal-only plan mode. The warned unrestricted onboarding
+    # choice replaces this array with ['--dangerously-skip-permissions'].
+    # Other Claude permission modes can be configured deliberately as literal
+    # entries; MDSpool appends its print, stream, verbose, and resume arguments.
+    defaultArgs: ['--permission-mode', 'plan']
+  codex:
+    enabled: true
+    executable: codex
+    directive: '@codex'
+    # Recommended: read-only sandbox. The warned unrestricted onboarding choice
+    # replaces this with ['--dangerously-bypass-approvals-and-sandbox'], which
+    # disables approvals and sandboxing. Codex also exposes separate approval
+    # and sandbox controls; MDSpool owns exec, JSON, stdin, and resume arguments.
+    defaultArgs: ['--sandbox', 'read-only']
+  cursor:
+    enabled: true
+    executable: cursor-agent
+    directive: '@cursor'
+    # Recommended: proposal-only plan mode. The warned direct-change choice is
+    # ['--force']; onboarding does not accept its --yolo alias as a custom flag.
+    # MDSpool appends print, stream, workspace, and resume arguments.
+    defaultArgs: ['--mode', 'plan']
+  # Pi is limited to file-review tools, but this is not path containment: its
+  # read tools can access any file readable by the current OS user. Pi has no
+  # built-in permission prompt or unrestricted profile. MDSpool appends these
+  # restrictions again with managed session/JSON arguments, so custom-only
+  # onboarding cannot weaken them. Use external containment when required.
+  pi:
+    enabled: true
+    executable: pi
+    directive: '@pi'
+    defaultArgs:
+      [
+        '--offline',
+        '--tools',
+        'read,grep,find,ls',
+        '--no-extensions',
+        '--no-context-files',
+        '--no-skills',
+        '--no-prompt-templates',
+      ]
+
+repositories:
+  - repository: github.com/example/widget
+    clones:
+      - /Users/you/src/widget-review-1
+      - /Users/you/src/widget-review-2

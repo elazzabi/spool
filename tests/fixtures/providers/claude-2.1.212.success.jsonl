@@ -1,0 +1,3 @@
+{"type":"system","subtype":"init","cwd":"/fixture/project","session_id":"befd3a17-851f-4062-bfda-9a62f313d7de"}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"intermediate text"}]},"session_id":"befd3a17-851f-4062-bfda-9a62f313d7de"}
+{"type":"result","subtype":"success","is_error":false,"result":"Claude review complete.","session_id":"befd3a17-851f-4062-bfda-9a62f313d7de","terminal_reason":"completed"}

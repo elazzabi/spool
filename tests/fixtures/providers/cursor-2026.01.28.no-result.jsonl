@@ -1,0 +1,2 @@
+{"type":"system","subtype":"init","cwd":"/fixture/project","session_id":"d6b62c6f-7ead-4fd6-9922-e952131177ff","model":"fixture-model","permissionMode":"plan"}
+{"type":"tool_call","subtype":"started","call_id":"tool_fixture","tool_call":{"readToolCall":{"args":{"path":"README.md"}}},"session_id":"d6b62c6f-7ead-4fd6-9922-e952131177ff"}

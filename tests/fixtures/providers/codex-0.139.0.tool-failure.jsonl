@@ -1,0 +1,2 @@
+{"type":"thread.started","thread_id":"0399a213-81c0-7800-8aa1-bbab2a035a53"}
+{"type":"item.completed","item":{"id":"item_tool_1","type":"command_execution","status":"failed","error":"Tool execution needs approval"}}

@@ -1,0 +1,349 @@
+import {
+  chmodSync,
+  existsSync,
+  lstatSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  realpathSync,
+  symlinkSync,
+  unlinkSync,
+  writeFileSync,
+} from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
+
+import YAML from 'yaml';
+import { describe, expect, it } from 'vitest';
+
+import {
+  addRepositoryMapping,
+  addWatchedFolder,
+  assessConfigTarget,
+  createConfigDocument,
+  mutateConfigDocument,
+  readRawConfigDocument,
+  removeWatchedFolder,
+} from '../../src/config/document.js';
+import { loadConfig } from '../../src/config/load.js';
+import type { RawConfig } from '../../src/config/schema.js';
+import { currentProcessStartIdentity } from '../../src/process-identity.js';
+
+describe('configuration documents', () => {
+  it('assesses a missing configuration parent without creating it', () => {
+    const fixture = createFixture();
+    const configPath = path.join(fixture.root, 'missing', 'nested', 'config.yaml');
+
+    const assessment = assessConfigTarget(configPath);
+
+    expect(assessment.target).toBe(configPath);
+    expect(assessment.parent).toBe(path.dirname(configPath));
+    expect(existsSync(assessment.parent)).toBe(false);
+  });
+
+  it('atomically publishes a validated owner-only config without replacing an existing target', () => {
+    const fixture = createFixture();
+
+    const written = createConfigDocument(fixture.configPath, fixture.raw);
+
+    expect(written).toBe(fixture.configPath);
+    expect(lstatSync(written).mode & 0o777).toBe(0o600);
+    expect(loadConfig(written).vaults).toEqual([fixture.vault]);
+    const original = readFileSync(written, 'utf8');
+    expect(() => createConfigDocument(written, fixture.raw)).toThrow(/already exists/i);
+    expect(readFileSync(written, 'utf8')).toBe(original);
+  });
+
+  it.each(['permission update', 'parent sync'] as const)(
+    'removes its published link when the %s fails',
+    (failure) => {
+      const fixture = createFixture();
+
+      expect(() =>
+        createConfigDocument(fixture.configPath, fixture.raw, {
+          ...(failure === 'permission update'
+            ? {
+                chmod: () => {
+                  throw new Error('injected chmod failure');
+                },
+              }
+            : {
+                syncParent: () => {
+                  throw new Error('injected sync failure');
+                },
+              }),
+        }),
+      ).toThrow(/injected/);
+
+      expect(existsSync(fixture.configPath)).toBe(false);
+    },
+  );
+
+  it('does not remove a replacement that races publication cleanup', () => {
+    const fixture = createFixture();
+
+    expect(() =>
+      createConfigDocument(fixture.configPath, fixture.raw, {
+        chmod: (target) => {
+          unlinkSync(target);
+          writeFileSync(target, 'replacement\n', { mode: 0o600 });
+          throw new Error('injected replacement race');
+        },
+      }),
+    ).toThrow('injected replacement race');
+
+    expect(readFileSync(fixture.configPath, 'utf8')).toBe('replacement\n');
+  });
+
+  it('adds and removes canonical watched folders while retaining at least one', () => {
+    const fixture = createFixture();
+    createConfigDocument(fixture.configPath, fixture.raw);
+
+    expect(addWatchedFolder(fixture.configPath, fixture.secondVault)).toEqual([
+      fixture.vault,
+      fixture.secondVault,
+    ]);
+    expect(loadConfig(fixture.configPath).vaults).toEqual([fixture.vault, fixture.secondVault]);
+    expect(() => addWatchedFolder(fixture.configPath, fixture.secondVault)).toThrow(
+      /already watched/i,
+    );
+
+    expect(removeWatchedFolder(fixture.configPath, fixture.vault)).toEqual([fixture.secondVault]);
+    expect(() => removeWatchedFolder(fixture.configPath, fixture.secondVault)).toThrow(
+      /final watched folder/i,
+    );
+    expect(loadConfig(fixture.configPath).vaults).toEqual([fixture.secondVault]);
+    expect(loadConfig(`${fixture.configPath}.backup`).vaults).toEqual([
+      fixture.vault,
+      fixture.secondVault,
+    ]);
+  });
+
+  it('adds a normalized repository pool while preserving unrelated settings and a backup', () => {
+    const fixture = createFixture();
+    const secondClone = path.join(fixture.root, 'second-clone');
+    mkdirSync(secondClone);
+    createConfigDocument(fixture.configPath, fixture.raw);
+    const original = readFileSync(fixture.configPath, 'utf8');
+
+    const repositories = addRepositoryMapping(fixture.configPath, {
+      repository: 'example/second',
+      clones: [secondClone],
+    });
+
+    expect(repositories).toEqual([
+      { repository: 'example/widget', clones: [fixture.clone] },
+      { repository: 'example/second', clones: [secondClone] },
+    ]);
+    const raw = readRawConfigDocument(fixture.configPath).raw;
+    expect(raw.repositories).toEqual([
+      { repository: 'example/widget', clones: [fixture.clone] },
+      { repository: 'example/second', clones: [secondClone] },
+    ]);
+    expect(raw.pollIntervalSeconds).toBe(30);
+    expect(raw.providers).toEqual(fixture.raw.providers);
+    expect(readFileSync(`${fixture.configPath}.backup`, 'utf8')).toBe(original);
+    expect(lstatSync(fixture.configPath).mode & 0o777).toBe(0o600);
+    expect(lstatSync(`${fixture.configPath}.backup`).mode & 0o777).toBe(0o600);
+  });
+
+  it('merges into a normalized repository match without rewriting its stored identity', () => {
+    const fixture = createFixture();
+    const secondClone = path.join(fixture.root, 'second-clone');
+    mkdirSync(secondClone);
+    fixture.raw.repositories[0]!.repository = 'https://github.com/Example/Widget.git';
+    createConfigDocument(fixture.configPath, fixture.raw);
+
+    const repositories = addRepositoryMapping(fixture.configPath, {
+      repository: 'example/widget',
+      clones: [secondClone],
+    });
+
+    expect(repositories).toEqual([
+      { repository: 'example/widget', clones: [fixture.clone, secondClone] },
+    ]);
+    expect(readRawConfigDocument(fixture.configPath).raw.repositories).toEqual([
+      {
+        repository: 'https://github.com/Example/Widget.git',
+        clones: [fixture.clone, secondClone],
+      },
+    ]);
+  });
+
+  it.each([
+    {
+      name: 'an exact duplicate',
+      arrange: (fixture: ReturnType<typeof createFixture>) => {
+        fixture.raw.repositories[0]!.clones = [path.basename(fixture.clone)];
+        return fixture.clone;
+      },
+      repository: 'example/widget',
+      error: /already configured/i,
+    },
+    {
+      name: 'a symlink alias of an existing clone',
+      arrange: (fixture: ReturnType<typeof createFixture>) => {
+        const alias = path.join(fixture.root, 'clone-alias');
+        symlinkSync(fixture.clone, alias);
+        fixture.raw.repositories[0]!.clones = [alias];
+        return fixture.clone;
+      },
+      repository: 'example/widget',
+      error: /already configured/i,
+    },
+    {
+      name: 'a clone already owned by another pool',
+      arrange: (fixture: ReturnType<typeof createFixture>) => fixture.clone,
+      repository: 'example/other',
+      error: /already configured/i,
+    },
+    {
+      name: 'a descendant of an existing clone',
+      arrange: (fixture: ReturnType<typeof createFixture>) => {
+        const nested = path.join(fixture.clone, 'nested');
+        mkdirSync(nested);
+        return nested;
+      },
+      repository: 'example/widget',
+      error: /overlap/i,
+    },
+    {
+      name: 'an ancestor of an existing clone',
+      arrange: (fixture: ReturnType<typeof createFixture>) => {
+        const nested = path.join(fixture.clone, 'nested');
+        mkdirSync(nested);
+        fixture.raw.repositories[0]!.clones = [nested];
+        return fixture.clone;
+      },
+      repository: 'example/widget',
+      error: /overlap/i,
+    },
+  ])('rejects $name without changing the configuration', ({ arrange, repository, error }) => {
+    const fixture = createFixture();
+    const clone = arrange(fixture);
+    createConfigDocument(fixture.configPath, fixture.raw);
+    const original = readFileSync(fixture.configPath, 'utf8');
+
+    expect(() => addRepositoryMapping(fixture.configPath, { repository, clones: [clone] })).toThrow(
+      error,
+    );
+
+    expect(readFileSync(fixture.configPath, 'utf8')).toBe(original);
+    expect(existsSync(`${fixture.configPath}.backup`)).toBe(false);
+  });
+
+  it('does not remove a lock owned by another MDSpool writer', () => {
+    const fixture = createFixture();
+    createConfigDocument(fixture.configPath, fixture.raw);
+    const lockPath = `${fixture.configPath}.lock`;
+    const lock = {
+      pid: process.pid,
+      processStartIdentity: currentProcessStartIdentity(),
+      nonce: 'other-writer',
+    };
+    writeFileSync(lockPath, `${JSON.stringify(lock)}\n`, { mode: 0o600 });
+
+    const secondClone = path.join(fixture.root, 'second-clone');
+    mkdirSync(secondClone);
+    const original = readFileSync(fixture.configPath, 'utf8');
+
+    expect(() =>
+      addRepositoryMapping(fixture.configPath, {
+        repository: 'example/second',
+        clones: [secondClone],
+      }),
+    ).toThrow(/another MDSpool configuration update/i);
+    expect(existsSync(lockPath)).toBe(true);
+    expect(readFileSync(lockPath, 'utf8')).toBe(`${JSON.stringify(lock)}\n`);
+    expect(readFileSync(fixture.configPath, 'utf8')).toBe(original);
+  });
+
+  it('recovers a configuration lock whose owning process no longer exists', () => {
+    const fixture = createFixture();
+    createConfigDocument(fixture.configPath, fixture.raw);
+    const lockPath = `${fixture.configPath}.lock`;
+    writeFileSync(
+      lockPath,
+      `${JSON.stringify({
+        pid: 2_147_483_647,
+        processStartIdentity: 'dead-process',
+        nonce: 'stale-writer',
+      })}\n`,
+      { mode: 0o600 },
+    );
+
+    const updated = mutateConfigDocument(fixture.configPath, (raw) => {
+      raw.pollIntervalSeconds = 20;
+    });
+
+    expect(updated.raw.pollIntervalSeconds).toBe(20);
+    expect(existsSync(lockPath)).toBe(false);
+  });
+
+  it('aborts mutation when an external edit wins before replacement', () => {
+    const fixture = createFixture();
+    createConfigDocument(fixture.configPath, fixture.raw);
+    const externallyEdited = readFileSync(fixture.configPath, 'utf8').replace(
+      'pollIntervalSeconds: 30',
+      'pollIntervalSeconds: 25',
+    );
+
+    expect(() =>
+      mutateConfigDocument(fixture.configPath, (raw) => {
+        raw.pollIntervalSeconds = 20;
+        writeFileSync(fixture.configPath, externallyEdited);
+      }),
+    ).toThrow(/changed during configuration update/i);
+
+    expect(readRawConfigDocument(fixture.configPath).raw.pollIntervalSeconds).toBe(25);
+  });
+
+  it('rejects symlink targets and unsafe writable configuration parents', () => {
+    const fixture = createFixture();
+    const realConfig = path.join(fixture.root, 'real.yaml');
+    writeFileSync(realConfig, YAML.stringify(fixture.raw), { mode: 0o600 });
+    symlinkSync(realConfig, fixture.configPath);
+
+    expect(() => readRawConfigDocument(fixture.configPath)).toThrow(/symbolic link/i);
+
+    const unsafeParent = path.join(fixture.root, 'unsafe');
+    mkdirSync(unsafeParent, { mode: 0o777 });
+    chmodSync(unsafeParent, 0o777);
+    expect(() => createConfigDocument(path.join(unsafeParent, 'config.yaml'), fixture.raw)).toThrow(
+      /writable by other users/i,
+    );
+  });
+});
+
+function createFixture(): {
+  root: string;
+  configPath: string;
+  vault: string;
+  secondVault: string;
+  clone: string;
+  raw: RawConfig;
+} {
+  const root = realpathSync(mkdtempSync(path.join(tmpdir(), 'mdspool-config-document-')));
+  const vault = path.join(root, 'vault');
+  const secondVault = path.join(root, 'second-vault');
+  const state = path.join(root, 'state');
+  const clone = path.join(root, 'clone');
+  for (const directory of [vault, secondVault, state, clone]) mkdirSync(directory);
+  const raw: RawConfig = {
+    vaults: [vault],
+    stateDirectory: state,
+    timeZone: 'UTC',
+    pollIntervalSeconds: 30,
+    dayAliases: {},
+    providers: {
+      claude: {
+        enabled: false,
+        executable: 'claude',
+        directive: '@claude',
+        defaultArgs: [],
+      },
+    },
+    repositories: [{ repository: 'example/widget', clones: [clone] }],
+  };
+  return { root, configPath: path.join(root, 'config.yaml'), vault, secondVault, clone, raw };
+}

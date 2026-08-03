@@ -1,0 +1,4 @@
+{"type":"thread.started","thread_id":"029f74e3-b9a0-7270-98c2-a37c4b61262c"}
+{"type":"turn.started"}
+{"type":"error","message":"{\"type\":\"error\",\"status\":400,\"error\":{\"type\":\"invalid_request_error\",\"message\":\"The configured model requires a newer version of Codex.\"}}"}
+{"type":"turn.failed","error":{"message":"{\"type\":\"error\",\"status\":400,\"error\":{\"type\":\"invalid_request_error\",\"message\":\"The configured model requires a newer version of Codex.\"}}"}}

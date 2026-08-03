@@ -1,0 +1,5 @@
+{"type":"session","version":3,"id":"13b2e3b4-82b0-42a7-bce6-08fa5cfcbe63","timestamp":"2026-07-19T10:00:00.000Z","cwd":"/fixture/project"}
+{"type":"agent_start"}
+{"type":"message_update","message":{"role":"assistant","content":[{"type":"text","text":"Pi review"}],"stopReason":"stop"},"assistantMessageEvent":{"type":"text_delta","delta":"Pi review"}}
+{"type":"message_end","message":{"role":"assistant","content":[{"type":"text","text":"Pi review complete."}],"provider":"anthropic","model":"claude-sonnet-4-5","stopReason":"stop","timestamp":1784455200000}}
+{"type":"agent_end","messages":[{"role":"user","content":"Review it","timestamp":1784455199000},{"role":"assistant","content":[{"type":"text","text":"Pi review complete."}],"provider":"anthropic","model":"claude-sonnet-4-5","stopReason":"stop","timestamp":1784455200000}]}

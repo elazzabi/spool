@@ -1,0 +1,290 @@
+name: GitHub Release
+
+on:
+  push:
+    tags: ['v*.*.*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing matching version tag to validate without publishing
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: github-release-${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+env:
+  RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+  GH_REPO: ${{ github.repository }}
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    outputs:
+      source-revision: ${{ steps.release.outputs.source-revision }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          package-manager-cache: false
+
+      - id: release
+        name: Require a matching immutable version tag
+        run: |
+          node scripts/build-release.mjs validate-tag --tag "$RELEASE_TAG"
+          source_revision="$(git rev-parse HEAD)"
+          if [ "$GITHUB_REF" != "refs/tags/$RELEASE_TAG" ] || [ "$source_revision" != "$GITHUB_SHA" ]; then
+            echo "Dry runs must be dispatched from the selected tag ref: gh workflow run release.yml --ref $RELEASE_TAG -f tag=$RELEASE_TAG" >&2
+            exit 1
+          fi
+          echo "source-revision=$source_revision" >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: validate
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            platform: linux
+            architecture: x64
+          - runner: ubuntu-24.04-arm
+            platform: linux
+            architecture: arm64
+          - runner: macos-15-intel
+            platform: darwin
+            architecture: x64
+          - runner: macos-15
+            platform: darwin
+            architecture: arm64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          package-manager-cache: false
+
+      - run: npm ci
+
+      - name: Build the native release asset
+        run: |
+          npm run release:artifact -- \
+            --output release \
+            --platform "${{ matrix.platform }}" \
+            --architecture "${{ matrix.architecture }}"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: release-${{ matrix.platform }}-${{ matrix.architecture }}
+          path: |
+            release/*.tar.gz
+            release/*.metadata.json
+          if-no-files-found: error
+          retention-days: 2
+
+  assemble:
+    needs: [validate, build]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+      artifact-metadata: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          package-manager-cache: false
+
+      - uses: actions/download-artifact@v7
+        with:
+          pattern: release-*
+          path: release
+          merge-multiple: true
+
+      - name: Assemble and verify the complete candidate
+        run: |
+          npm run release:manifest -- \
+            --output release \
+            --source-revision "${{ needs.validate.outputs.source-revision }}"
+          node scripts/test-release.mjs --manifest release/release-manifest.json
+
+      - name: Attest every immutable release asset
+        uses: actions/attest@v4
+        with:
+          subject-path: |
+            release/*.tar.gz
+            release/release-manifest.json
+            release/SHA256SUMS
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: candidate-release
+          path: |
+            release/*.tar.gz
+            release/release-manifest.json
+            release/SHA256SUMS
+          if-no-files-found: error
+          retention-days: 2
+
+  draft:
+    if: github.event_name == 'push'
+    needs: [validate, assemble]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v7
+        with:
+          name: candidate-release
+          path: release
+
+      - name: Create the unpublished release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if release_is_draft="$(gh release view "$RELEASE_TAG" --json isDraft --jq .isDraft 2>/dev/null)"; then
+            if [ "$release_is_draft" != "true" ]; then
+              echo "Release $RELEASE_TAG is already published" >&2
+              exit 1
+            fi
+          else
+            gh release create "$RELEASE_TAG" --draft --verify-tag --title "MDSpool $RELEASE_TAG" --generate-notes
+          fi
+          gh release upload "$RELEASE_TAG" release/*.tar.gz release/release-manifest.json release/SHA256SUMS --clobber
+
+  smoke-release:
+    if: github.event_name == 'push'
+    needs: [validate, draft]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            platform: linux
+            architecture: x64
+          - runner: ubuntu-24.04-arm
+            platform: linux
+            architecture: arm64
+          - runner: macos-15-intel
+            platform: darwin
+            architecture: x64
+          - runner: macos-15
+            platform: darwin
+            architecture: arm64
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: read
+      attestations: read
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          package-manager-cache: false
+
+      - name: Download the draft release assets into a clean job
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release download "$RELEASE_TAG" --dir downloaded
+
+      - name: Verify provenance and smoke the exact downloaded tuple
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          for asset in downloaded/*.tar.gz downloaded/release-manifest.json downloaded/SHA256SUMS; do
+            gh attestation verify "$asset" \
+              --repo "$GITHUB_REPOSITORY" \
+              --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/release.yml" \
+              --source-ref "$GITHUB_REF" \
+              --source-digest "${{ needs.validate.outputs.source-revision }}"
+          done
+          node scripts/test-release.mjs \
+            --manifest downloaded/release-manifest.json \
+            --runtime "$(command -v node)" \
+            --daemon-lock true
+
+  smoke-dry-run:
+    if: github.event_name == 'workflow_dispatch'
+    needs: [validate, assemble]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            platform: linux
+            architecture: x64
+          - runner: ubuntu-24.04-arm
+            platform: linux
+            architecture: arm64
+          - runner: macos-15-intel
+            platform: darwin
+            architecture: x64
+          - runner: macos-15
+            platform: darwin
+            architecture: arm64
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: read
+      attestations: read
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          package-manager-cache: false
+
+      - uses: actions/download-artifact@v7
+        with:
+          name: candidate-release
+          path: downloaded
+
+      - name: Verify provenance and smoke the exact dry-run tuple
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          for asset in downloaded/*.tar.gz downloaded/release-manifest.json downloaded/SHA256SUMS; do
+            gh attestation verify "$asset" \
+              --repo "$GITHUB_REPOSITORY" \
+              --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/release.yml" \
+              --source-ref "$GITHUB_REF" \
+              --source-digest "${{ needs.validate.outputs.source-revision }}"
+          done
+          node scripts/test-release.mjs \
+            --manifest downloaded/release-manifest.json \
+            --runtime "$(command -v node)" \
+            --daemon-lock true
+
+  publish:
+    if: github.event_name == 'push'
+    needs: [validate, smoke-release]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - name: Publish only the fully downloaded and verified draft
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release edit "$RELEASE_TAG" --draft=false

@@ -1,0 +1,3 @@
+{"type":"session","version":3,"id":"dc0e124d-0676-46ab-958e-e333f8e43a14","timestamp":"2026-07-19T10:00:00.000Z","cwd":"/fixture/project"}
+{"type":"message_end","message":{"role":"assistant","content":[{"type":"text","text":"Review cancelled by operator."}],"provider":"google","model":"gemini-2.5-pro","stopReason":"aborted","timestamp":1784455200000}}
+{"type":"agent_end","messages":[{"role":"assistant","content":[{"type":"text","text":"Review cancelled by operator."}],"provider":"google","model":"gemini-2.5-pro","stopReason":"aborted","timestamp":1784455200000}]}

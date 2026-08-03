@@ -1,0 +1,2 @@
+{"type":"system","subtype":"init","cwd":"/fixture/project","session_id":"e6b62c6f-7ead-4fd6-9922-e952131177ff","model":"fixture-model","permissionMode":"plan"}
+{"type":"result","subtype":"error","is_error":true,"result":"Approval required for tool execution.","session_id":"e6b62c6f-7ead-4fd6-9922-e952131177ff"}

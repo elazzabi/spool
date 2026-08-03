@@ -1,0 +1,3 @@
+{"type":"thread.started","thread_id":"0299a213-81c0-7800-8aa1-bbab2a035a53"}
+{"type":"turn.started"}
+{"type":"turn.failed","error":{"message":"Approval was denied for the requested command"}}

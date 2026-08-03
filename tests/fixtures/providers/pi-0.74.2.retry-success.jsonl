@@ -1,0 +1,7 @@
+{"type":"session","version":3,"id":"21428fc0-2038-48f7-93ee-df76bd66c043","timestamp":"2026-07-19T10:00:00.000Z","cwd":"/fixture/project"}
+{"type":"message_end","message":{"role":"assistant","content":[],"provider":"anthropic","model":"claude-sonnet-4-5","stopReason":"error","errorMessage":"529 overloaded","timestamp":1784455200000}}
+{"type":"agent_end","messages":[{"role":"assistant","content":[],"provider":"anthropic","model":"claude-sonnet-4-5","stopReason":"error","errorMessage":"529 overloaded","timestamp":1784455200000}]}
+{"type":"auto_retry_start","attempt":1,"maxAttempts":3,"delayMs":1000,"errorMessage":"529 overloaded"}
+{"type":"auto_retry_end","success":true,"attempt":1}
+{"type":"message_end","message":{"role":"assistant","content":[{"type":"text","text":"Pi retry completed."}],"provider":"anthropic","model":"claude-sonnet-4-5","stopReason":"stop","timestamp":1784455201000}}
+{"type":"agent_end","messages":[{"role":"assistant","content":[{"type":"text","text":"Pi retry completed."}],"provider":"anthropic","model":"claude-sonnet-4-5","stopReason":"stop","timestamp":1784455201000}]}
