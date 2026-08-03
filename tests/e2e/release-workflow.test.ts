@@ -77,7 +77,10 @@ describe('GitHub Release workflow contract', () => {
     const source = readFileSync(releaseWorkflowPath, 'utf8');
     const workflow = YAML.parse(source) as {
       on: { workflow_dispatch?: { inputs?: Record<string, { default?: unknown; type?: string }> } };
-      jobs: Record<string, { if?: string; steps?: Array<{ run?: string }> }>;
+      jobs: Record<
+        string,
+        { if?: string; permissions?: Record<string, string>; steps?: Array<{ run?: string }> }
+      >;
     };
     const validationCommands = workflow.jobs.validate?.steps
       ?.map((step) => step.run ?? '')
@@ -94,6 +97,7 @@ describe('GitHub Release workflow contract', () => {
     expect(workflow.jobs['smoke-release']?.if).toContain(
       "github.event_name == 'push' || inputs.publish",
     );
+    expect(workflow.jobs['smoke-release']?.permissions?.contents).toBe('write');
     expect(workflow.jobs['smoke-dry-run']?.if).toContain('!inputs.publish');
   });
 
