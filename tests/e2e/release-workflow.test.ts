@@ -57,7 +57,9 @@ describe('GitHub Release workflow contract', () => {
     expect(workflow.on).toHaveProperty('push.tags', ['v*.*.*']);
     expect(workflow.on).toHaveProperty('workflow_dispatch');
     expect(source).toContain('gh release create "$RELEASE_TAG" --draft');
-    expect(source).toContain('gh release download "$RELEASE_TAG"');
+    expect(source).not.toContain('gh release download "$RELEASE_TAG"');
+    expect(source).toContain('repos/$GH_REPO/releases?per_page=100');
+    expect(source).toContain('repos/$GH_REPO/releases/assets/$asset_id');
     expect(source).toContain('actions/attest@v4');
     expect(source).toContain('gh attestation verify');
     expect(source).toContain('--daemon-lock true');
@@ -65,10 +67,34 @@ describe('GitHub Release workflow contract', () => {
     expect(source).toContain('SHA256SUMS');
 
     expect(workflow.jobs.publish?.needs).toEqual(['validate', 'smoke-release']);
-    expect(workflow.jobs.publish?.if).toContain("github.event_name == 'push'");
+    expect(workflow.jobs.publish?.if).toContain("github.event_name == 'push' || inputs.publish");
     expect(JSON.stringify(workflow.jobs.publish?.steps)).toContain('gh release edit');
     expect(JSON.stringify(workflow.jobs.publish?.steps)).toContain('--draft=false');
     expect(JSON.stringify(workflow.jobs.publish?.steps)).not.toContain('--latest');
+  });
+
+  it('can safely resume a tagged release from the updated main workflow', () => {
+    const source = readFileSync(releaseWorkflowPath, 'utf8');
+    const workflow = YAML.parse(source) as {
+      on: { workflow_dispatch?: { inputs?: Record<string, { default?: unknown; type?: string }> } };
+      jobs: Record<string, { if?: string; steps?: Array<{ run?: string }> }>;
+    };
+    const validationCommands = workflow.jobs.validate?.steps
+      ?.map((step) => step.run ?? '')
+      .join('\n');
+
+    expect(workflow.on.workflow_dispatch?.inputs?.publish).toEqual({
+      description: 'Resume and publish an existing draft release after validation',
+      required: false,
+      default: false,
+      type: 'boolean',
+    });
+    expect(validationCommands).toContain('git rev-parse "$RELEASE_TAG^{commit}"');
+    expect(workflow.jobs.draft?.if).toContain("github.event_name == 'push' || inputs.publish");
+    expect(workflow.jobs['smoke-release']?.if).toContain(
+      "github.event_name == 'push' || inputs.publish",
+    );
+    expect(workflow.jobs['smoke-dry-run']?.if).toContain('!inputs.publish');
   });
 
   it('reuses draft releases while preserving repository and publication gates', () => {

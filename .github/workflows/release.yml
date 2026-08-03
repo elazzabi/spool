@@ -6,9 +6,14 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: Existing matching version tag to validate without publishing
+        description: Existing matching version tag to validate
         required: true
         type: string
+      publish:
+        description: Resume and publish an existing draft release after validation
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -41,8 +46,13 @@ jobs:
         run: |
           node scripts/build-release.mjs validate-tag --tag "$RELEASE_TAG"
           source_revision="$(git rev-parse HEAD)"
-          if [ "$GITHUB_REF" != "refs/tags/$RELEASE_TAG" ] || [ "$source_revision" != "$GITHUB_SHA" ]; then
-            echo "Dry runs must be dispatched from the selected tag ref: gh workflow run release.yml --ref $RELEASE_TAG -f tag=$RELEASE_TAG" >&2
+          tag_revision="$(git rev-parse "$RELEASE_TAG^{commit}")"
+          if [ "$source_revision" != "$tag_revision" ]; then
+            echo "Checked-out source $source_revision does not match $RELEASE_TAG at $tag_revision" >&2
+            exit 1
+          fi
+          if [ "$GITHUB_EVENT_NAME" = "push" ] && { [ "$GITHUB_REF" != "refs/tags/$RELEASE_TAG" ] || [ "$source_revision" != "$GITHUB_SHA" ]; }; then
+            echo "Tag push metadata does not match the immutable release source" >&2
             exit 1
           fi
           echo "source-revision=$source_revision" >> "$GITHUB_OUTPUT"
@@ -144,7 +154,7 @@ jobs:
           retention-days: 2
 
   draft:
-    if: github.event_name == 'push'
+    if: github.event_name == 'push' || inputs.publish
     needs: [validate, assemble]
     runs-on: ubuntu-24.04
     permissions:
@@ -170,7 +180,7 @@ jobs:
           gh release upload "$RELEASE_TAG" release/*.tar.gz release/release-manifest.json release/SHA256SUMS --clobber
 
   smoke-release:
-    if: github.event_name == 'push'
+    if: github.event_name == 'push' || inputs.publish
     needs: [validate, draft]
     strategy:
       fail-fast: false
@@ -205,7 +215,43 @@ jobs:
       - name: Download the draft release assets into a clean job
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release download "$RELEASE_TAG" --dir downloaded
+        run: |
+          release_id="$(
+            gh api "repos/$GH_REPO/releases?per_page=100" \
+              --jq ".[] | select(.tag_name == \"$RELEASE_TAG\" and .draft == true) | .id" |
+              head -n 1
+          )"
+          if [ -z "$release_id" ]; then
+            echo "Draft release $RELEASE_TAG was not found" >&2
+            exit 1
+          fi
+
+          asset_list="$RUNNER_TEMP/draft-release-assets.tsv"
+          gh api "repos/$GH_REPO/releases/$release_id/assets?per_page=100" \
+            --jq '.[] | [.id, .name] | @tsv' > "$asset_list"
+          asset_count="$(wc -l < "$asset_list" | tr -d ' ')"
+          if [ "$asset_count" -ne 6 ]; then
+            echo "Expected 6 draft assets for $RELEASE_TAG, found $asset_count" >&2
+            exit 1
+          fi
+
+          mkdir downloaded
+          while IFS=$'\t' read -r asset_id asset_name; do
+            case "$asset_name" in
+              "release-manifest.json"|"SHA256SUMS"|\
+              "spool-$RELEASE_TAG-node24-abi137-linux-x64.tar.gz"|\
+              "spool-$RELEASE_TAG-node24-abi137-linux-arm64.tar.gz"|\
+              "spool-$RELEASE_TAG-node24-abi137-darwin-x64.tar.gz"|\
+              "spool-$RELEASE_TAG-node24-abi137-darwin-arm64.tar.gz") ;;
+              *)
+                echo "Unexpected draft asset: $asset_name" >&2
+                exit 1
+                ;;
+            esac
+            gh api \
+              -H "Accept: application/octet-stream" \
+              "repos/$GH_REPO/releases/assets/$asset_id" > "downloaded/$asset_name"
+          done < "$asset_list"
 
       - name: Verify provenance and smoke the exact downloaded tuple
         env:
@@ -224,7 +270,7 @@ jobs:
             --daemon-lock true
 
   smoke-dry-run:
-    if: github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'workflow_dispatch' && !inputs.publish
     needs: [validate, assemble]
     strategy:
       fail-fast: false
@@ -278,7 +324,7 @@ jobs:
             --daemon-lock true
 
   publish:
-    if: github.event_name == 'push'
+    if: github.event_name == 'push' || inputs.publish
     needs: [validate, smoke-release]
     runs-on: ubuntu-24.04
     permissions:
