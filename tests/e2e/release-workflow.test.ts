@@ -99,6 +99,8 @@ describe('GitHub Release workflow contract', () => {
     );
     expect(workflow.jobs['smoke-release']?.permissions?.contents).toBe('write');
     expect(workflow.jobs['smoke-dry-run']?.if).toContain('!inputs.publish');
+    expect(source).not.toContain('--source-ref "$GITHUB_REF"');
+    expect(source.match(/--source-ref "refs\/tags\/\$RELEASE_TAG"/g)).toHaveLength(2);
   });
 
   it('reuses draft releases while preserving repository and publication gates', () => {

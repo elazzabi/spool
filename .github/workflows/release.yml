@@ -262,7 +262,7 @@ jobs:
             gh attestation verify "$asset" \
               --repo "$GITHUB_REPOSITORY" \
               --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/release.yml" \
-              --source-ref "$GITHUB_REF" \
+              --source-ref "refs/tags/$RELEASE_TAG" \
               --source-digest "${{ needs.validate.outputs.source-revision }}"
           done
           node scripts/test-release.mjs \
@@ -316,7 +316,7 @@ jobs:
             gh attestation verify "$asset" \
               --repo "$GITHUB_REPOSITORY" \
               --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/release.yml" \
-              --source-ref "$GITHUB_REF" \
+              --source-ref "refs/tags/$RELEASE_TAG" \
               --source-digest "${{ needs.validate.outputs.source-revision }}"
           done
           node scripts/test-release.mjs \
