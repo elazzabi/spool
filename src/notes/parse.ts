@@ -36,9 +36,10 @@ interface HeadingPosition {
 
 const eventMarkers = [
   /<span[\t ]+data-spool-event="([^"\r\n]+)"[\t ]+data-spool-task="([^"\r\n]+)"[\t ]*><\/span>/g,
+  /<span[\t ]+data-mdspool-event="([^"\r\n]+)"[\t ]+data-mdspool-task="([^"\r\n]+)"[\t ]*><\/span>/g,
 ];
 const potentialEventMarker =
-  /<span\b[^>\r\n]*(?:data-spool-event|data-spool-task)[^>\r\n]*>(?:<\/span>)?/g;
+  /<span\b[^>\r\n]*data-(?:md)?spool-(?:event|task)[^>\r\n]*>(?:<\/span>)?/g;
 
 export function hashNoteSource(source: string): string {
   return createHash('sha256').update(source, 'utf8').digest('hex');
@@ -179,17 +180,22 @@ function collectCodeSpans(node: Nodes, result: SourceSpan[] = []): SourceSpan[] 
 
 function collectSpoolBlocks(source: string, node: Nodes, result: SpoolBlock[] = []): SpoolBlock[] {
   if (node.type === 'code') {
-    if (node.lang !== 'spool') return result;
+    if (node.lang !== 'spool' && node.lang !== 'mdspool') return result;
     const start = offsetOf(node, 'start');
     const end = offsetOf(node, 'end');
     if (start === null || end === null) return result;
     const lines = node.value.split(/\r?\n/);
     const task = /^Task: ([A-Za-z0-9][A-Za-z0-9._:-]{0,127})$/.exec(lines[0] ?? '');
-    const anchor = /^Anchor: (spool-[A-Za-z0-9-]+)$/.exec(lines[1] ?? '');
+    const anchor = /^Anchor: ((?:md)?spool-[A-Za-z0-9-]+)$/.exec(lines[1] ?? '');
     const taskId = task?.[1] ?? null;
+    const currentAnchor = taskId ? receiptAnchorFor(taskId) : null;
+    const legacyAnchor = currentAnchor?.replace(/^spool-/, 'mdspool-') ?? null;
     result.push({
       taskId,
-      anchor: taskId && anchor?.[1] === receiptAnchorFor(taskId) ? anchor[1] : null,
+      anchor:
+        taskId && (anchor?.[1] === currentAnchor || anchor?.[1] === legacyAnchor)
+          ? anchor[1]
+          : null,
       start: lineStart(source, start),
       end: lineEnd(source, end),
     });

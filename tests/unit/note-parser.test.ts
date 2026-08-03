@@ -288,6 +288,32 @@ describe('scanNote', () => {
     expect(bootstrapped).toContain('```aisidian');
   });
 
+  it('recognizes legacy mdspool controls as read-only tracked work', () => {
+    const source = [
+      '## Monday',
+      '- [ ] @claude completed before the rename',
+      '  ```mdspool',
+      '  Task: legacy-task',
+      '  Anchor: mdspool-legacy-task',
+      '  Status: Completed',
+      '  ```',
+      '  - [ ] @claude generated follow-up <span data-mdspool-event="review:legacy" data-mdspool-task="legacy-task"></span>',
+    ].join('\n');
+
+    const scan = scanNote(source, { providers });
+
+    expect(scan.directives).toHaveLength(1);
+    expect(scan.directives[0]).toMatchObject({
+      taskId: 'legacy-task',
+      receiptAnchor: 'mdspool-legacy-task',
+    });
+    expect(scan.receiptRegions).toHaveLength(1);
+    expect(scan.eventRegions).toMatchObject([
+      { taskId: 'legacy-task', eventKey: 'review:legacy', checked: false },
+    ]);
+    expect(scan.source).toBe(source);
+  });
+
   it('ignores generated regions even when provider data resembles directives', () => {
     const source = [
       '## Monday',
