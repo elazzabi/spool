@@ -200,7 +200,8 @@ jobs:
             architecture: arm64
     runs-on: ${{ matrix.runner }}
     permissions:
-      contents: read
+      # GitHub only exposes draft releases to tokens with push access.
+      contents: write
       attestations: read
     steps:
       - uses: actions/checkout@v6
