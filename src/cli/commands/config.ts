@@ -123,6 +123,8 @@ export function removeRepositoryCommand(
     throw sanitizedConfigDocumentError(error);
   }
 
+  assertWorkspaceDoesNotContainSpoolConfiguration(config, canonicalClone);
+
   const database = openLedgerDatabase(config.stateDirectory);
   const daemonLock = new DaemonLock(database);
   const owner: DaemonOwnershipIdentity = {
@@ -133,7 +135,7 @@ export function removeRepositoryCommand(
   let ownsDaemonLock = false;
   try {
     try {
-      daemonLock.acquire(owner, 30_000);
+      daemonLock.acquireProcessScoped(owner);
       ownsDaemonLock = true;
     } catch (error) {
       if (error instanceof DaemonLockConflictError) {
@@ -153,6 +155,22 @@ export function removeRepositoryCommand(
   } finally {
     if (ownsDaemonLock) daemonLock.release(owner);
     database.close();
+  }
+}
+
+function assertWorkspaceDoesNotContainSpoolConfiguration(
+  config: SpoolConfig,
+  canonicalClone: string,
+): void {
+  if (isPathInside(canonicalClone, config.stateDirectory)) {
+    throw new ConfigDocumentError(
+      `Cannot remove ${sanitizeTerminalText(canonicalClone)} because the spool state directory ${sanitizeTerminalText(config.stateDirectory)} is inside it; move the state directory outside this workspace, update the configuration, and retry`,
+    );
+  }
+  if (isPathInside(canonicalClone, config.configPath)) {
+    throw new ConfigDocumentError(
+      `Cannot remove ${sanitizeTerminalText(canonicalClone)} because the spool configuration ${sanitizeTerminalText(config.configPath)} is inside it; move the configuration outside this workspace and retry`,
+    );
   }
 }
 
