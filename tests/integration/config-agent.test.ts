@@ -4,13 +4,14 @@ import {
   mkdtempSync,
   readFileSync,
   realpathSync,
+  rmSync,
   writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { PassThrough, Readable } from 'node:stream';
 
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { runConfigAgentAdd } from '../../src/cli/commands/config-agent.js';
 import {
@@ -27,6 +28,12 @@ import { loadConfig } from '../../src/config/load.js';
 import type { RawConfig } from '../../src/config/schema.js';
 import type { ProviderProbeRunner } from '../../src/config/setup.js';
 import { currentProcessStartIdentity } from '../../src/process-identity.js';
+
+const roots: string[] = [];
+
+afterEach(() => {
+  for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
+});
 
 describe('post-init agent enrollment', () => {
   it('replaces one disabled provider with the reviewed profile and leaves everything else intact', async () => {
@@ -542,6 +549,7 @@ function createFixture(): {
   raw: RawConfig;
 } {
   const root = realpathSync(mkdtempSync(path.join(tmpdir(), 'spool-config-agent-')));
+  roots.push(root);
   const bin = path.join(root, 'bin');
   const vault = path.join(root, 'vault');
   const state = path.join(root, 'state');

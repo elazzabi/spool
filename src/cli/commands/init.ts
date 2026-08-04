@@ -102,7 +102,7 @@ export async function runInit(options: RunInitOptions = {}): Promise<InitOutcome
       'quickstart',
     );
 
-    let providerStatuses = await detectProviders(prompter, providerDetectionOptions(options));
+    let providerStatuses = await detectProviders(prompter, options);
     if (!providerStatuses.some((status) => status.ready)) {
       return finishWithoutReadyAgent(prompter, providerStatuses);
     }
@@ -135,7 +135,7 @@ export async function runInit(options: RunInitOptions = {}): Promise<InitOutcome
     while (true) {
       const refreshedStatuses = await detectProviders(
         prompter,
-        providerDetectionOptions(options, [...selected]),
+        { ...options, providerNames: [...selected] },
         'Rechecking selected agents',
       );
       const latestStatuses = providerStatuses.map(
@@ -277,18 +277,6 @@ export function formatInitResult(result: InitResult): string {
     'Start spool with:',
     `  ${result.daemonCommand}`,
   ].join('\n');
-}
-
-function providerDetectionOptions(
-  options: RunInitOptions,
-  providerNames?: readonly BuiltinProviderName[],
-) {
-  return {
-    ...(options.commandRunner === undefined ? {} : { commandRunner: options.commandRunner }),
-    ...(options.pathValue === undefined ? {} : { pathValue: options.pathValue }),
-    ...(providerNames === undefined ? {} : { providerNames }),
-    ...(options.environment === undefined ? {} : { environment: options.environment }),
-  };
 }
 
 async function selectAgents(

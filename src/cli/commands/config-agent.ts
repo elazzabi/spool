@@ -17,12 +17,11 @@ import { renderShellCommand, sanitizeTerminalText } from '../output.js';
 import { addBuiltinProvider, readRawConfigDocument } from '../../config/document.js';
 import type { RawConfig } from '../../config/schema.js';
 import {
-  assertProviderArgumentChoice,
+  mapSelectedProviders,
   providerSetupDefinitions,
   SetupError,
   type ProviderArgumentChoice,
   type ProviderProbeRunner,
-  type ProviderSetupDefinition,
   type ProviderSetupStatus,
 } from '../../config/setup.js';
 import type { BuiltinProviderName } from '../../providers/preflight.js';
@@ -92,7 +91,10 @@ export async function runConfigAgentAdd(
       return { kind: 'not-added', reason: 'no-addable-agents' };
     }
 
-    let statuses = await detectProviders(prompter, detectionOptions(options, candidates));
+    let statuses = await detectProviders(prompter, {
+      ...options,
+      providerNames: candidates.map(({ name }) => name),
+    });
     while (true) {
       if (!statuses.some((status) => status.ready)) {
         prompter.note(formatUnavailableProviders(statuses), 'Agents found');
@@ -104,13 +106,13 @@ export async function runConfigAgentAdd(
 
       const selected = await selectAgent(prompter, statuses);
       const status = statuses.find(({ definition }) => definition.name === selected)!;
-      const expectedTarget = cloneProvider(document.raw.providers[selected]);
+      const expectedTarget = document.raw.providers[selected];
       const choice = await collectProviderArgumentChoice(prompter, status.definition);
       showSelectedAgentWarnings(prompter, new Set([selected]));
 
       const [rechecked] = await detectProviders(
         prompter,
-        detectionOptions(options, [status.definition]),
+        { ...options, providerNames: [status.definition.name] },
         `Rechecking ${displayName(selected)}`,
       );
       if (!rechecked?.ready) {
@@ -118,11 +120,18 @@ export async function runConfigAgentAdd(
           `${displayName(selected)} changed readiness. Review the updated agent list before continuing.`,
           'Agent status changed',
         );
-        statuses = await detectProviders(prompter, detectionOptions(options, candidates));
+        statuses = await detectProviders(prompter, {
+          ...options,
+          providerNames: candidates.map(({ name }) => name),
+        });
         continue;
       }
 
-      const reviewedProvider = buildReviewedProvider(status.definition, choice);
+      const reviewedProvider = mapSelectedProviders(
+        [rechecked],
+        new Set([selected]),
+        new Map([[selected, choice]]),
+      )[selected]!;
       prompter.note(
         formatReview(document.path, rechecked, expectedTarget, reviewedProvider, choice),
         'Review',
@@ -156,18 +165,6 @@ export async function runConfigAgentAdd(
   }
 }
 
-function detectionOptions(
-  options: RunConfigAgentAddOptions,
-  definitions: readonly ProviderSetupDefinition[],
-) {
-  return {
-    ...(options.commandRunner === undefined ? {} : { commandRunner: options.commandRunner }),
-    ...(options.pathValue === undefined ? {} : { pathValue: options.pathValue }),
-    providerNames: definitions.map(({ name }) => name),
-    ...(options.environment === undefined ? {} : { environment: options.environment }),
-  };
-}
-
 async function selectAgent(
   prompter: SetupPrompter,
   statuses: readonly ProviderSetupStatus[],
@@ -185,25 +182,6 @@ async function selectAgent(
     })),
     firstReady,
   );
-}
-
-function buildReviewedProvider(
-  definition: ProviderSetupDefinition,
-  choice: ProviderArgumentChoice,
-): RawConfig['providers'][string] {
-  assertProviderArgumentChoice(definition, choice);
-  const profileArgs =
-    choice.profile === 'recommended'
-      ? definition.recommendedArgs
-      : choice.profile === 'unrestricted'
-        ? (definition.access.unrestricted?.args ?? [])
-        : [];
-  return {
-    enabled: true,
-    executable: definition.executable,
-    directive: definition.directive,
-    defaultArgs: [...profileArgs, ...choice.extraArgs],
-  };
 }
 
 function formatReview(
@@ -259,12 +237,4 @@ function directiveOwner(
     ([name, provider]) =>
       name !== target && (provider.directive ?? `@${name}`).toLowerCase() === identity,
   )?.[0];
-}
-
-function cloneProvider(
-  provider: RawConfig['providers'][string] | undefined,
-): RawConfig['providers'][string] | undefined {
-  return provider === undefined
-    ? undefined
-    : { ...provider, defaultArgs: [...provider.defaultArgs] };
 }
