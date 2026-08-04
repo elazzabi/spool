@@ -36,7 +36,7 @@ export function createProgram(): Command {
   const program = new Command()
     .name('spool')
     .description('Delegate explicit Markdown todos to local AI agents')
-    .version('0.1.0')
+    .version('0.1.1')
     .option('-c, --config <path>', 'configuration file (otherwise uses the platform default)');
 
   program.action(() => program.outputHelp());
