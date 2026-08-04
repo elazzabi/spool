@@ -75,6 +75,17 @@ describe('operator CLI commands', () => {
     expect(init?.helpInformation()).toContain('line-oriented');
   });
 
+  it('registers guided post-init agent enrollment with accessible prompts', () => {
+    const config = createProgram().commands.find((command) => command.name() === 'config');
+    const agent = config?.commands.find((command) => command.name() === 'agent');
+    const add = agent?.commands.find((command) => command.name() === 'add');
+
+    expect(agent?.description()).toContain('coding agents');
+    expect(add?.description()).toContain('guided');
+    expect(add?.helpInformation()).toContain('--plain');
+    expect(add?.helpInformation()).toContain('line-oriented');
+  });
+
   it('registers a human-only logs command with follow mode', () => {
     const logs = createProgram().commands.find((command) => command.name() === 'logs');
 

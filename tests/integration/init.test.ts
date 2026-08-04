@@ -49,8 +49,9 @@ describe('friendly onboarding wizard', () => {
     expect(message).toContain(
       'Change watched folders or repositories with:\n  spool config watch --help\n  spool config repository --help',
     );
+    expect(message).toContain('Add another supported coding agent with:\n  spool config agent add');
     expect(message).toContain(
-      'For providers, polling, time zone, or state storage, edit this YAML file directly.',
+      'For polling, time zone, or state storage, edit this YAML file directly.',
     );
     expect(message).toContain(
       'To start over or recover an unusable configuration, move this file aside and run spool init again.',
@@ -76,6 +77,7 @@ describe('friendly onboarding wizard', () => {
     expect(message).toContain(`spool --config '${configPath}' config show`);
     expect(message).toContain(`spool --config '${configPath}' config watch --help`);
     expect(message).toContain(`spool --config '${configPath}' config repository --help`);
+    expect(message).toContain(`spool --config '${configPath}' config agent add`);
     expect(readFileSync(configPath, 'utf8')).toBe(original);
     expect(prompter.selectMessages).toHaveLength(0);
     expect(prompter.closed).toBe(false);

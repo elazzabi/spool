@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { Command } from 'commander';
 
 import { collectDoctorReport, presentDoctorReport } from './commands/doctor.js';
+import { runConfigAgentAdd } from './commands/config-agent.js';
 import {
   addRepositoryCommand,
   addWatchedFolderCommand,
@@ -193,6 +194,18 @@ export function createProgram(): Command {
       } else {
         presentConfigurationSummary(summary, new ClackStaticCliPresenter());
       }
+    });
+  const agent = config.command('agent').description('manage supported coding agents');
+  agent
+    .command('add')
+    .description('run guided setup for one additional supported coding agent')
+    .option('--plain', 'use accessible line-oriented prompts instead of interactive controls')
+    .action(async (options: { plain?: boolean }, command: Command) => {
+      const globals = command.optsWithGlobals<{ config?: string }>();
+      await runConfigAgentAdd({
+        ...(globals.config === undefined ? {} : { configPath: globals.config }),
+        plain: options.plain === true,
+      });
     });
   const repository = config
     .command('repository')
