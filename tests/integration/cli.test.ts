@@ -9,6 +9,7 @@ import {
   realpathSync,
   statSync,
   symlinkSync,
+  unlinkSync,
   writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -662,6 +663,322 @@ describe('operator CLI commands', () => {
     expect(output.text()).toContain(`Added ${addedClone} to example/widget.`);
   });
 
+  it('removes an exact repository clone by a caller-relative path without touching its checkout', async () => {
+    const fixture = cliFixture();
+    const clone = createGitClone(
+      fixture.root,
+      'removable-clone',
+      'https://github.com/Example/Widget.git',
+    );
+    configureCloneInExistingPool(fixture, clone);
+    writeFileSync(path.join(clone, 'untracked.txt'), 'keep me\n');
+    writeFileSync(
+      fixture.configPath,
+      readFileSync(fixture.configPath, 'utf8').replace(
+        'repository: example/widget',
+        'repository: https://github.com/Example/Widget.git',
+      ),
+    );
+    const output = captureStdout();
+    const previousCwd = process.cwd();
+    try {
+      process.chdir(fixture.root);
+      await createProgram().parseAsync([
+        'node',
+        'spool',
+        '--config',
+        fixture.configPath,
+        'config',
+        'repository',
+        'remove',
+        path.basename(clone),
+      ]);
+    } finally {
+      process.chdir(previousCwd);
+    }
+
+    expect(output.text()).toContain(`Removed ${clone} from example/widget.`);
+    expect(output.text()).toContain('Start the daemon again to apply this change.');
+    expect(loadConfig(fixture.configPath).repositories).toEqual([
+      { repository: 'example/widget', clones: [fixture.clone] },
+    ]);
+    expect(readFileSync(path.join(clone, 'untracked.txt'), 'utf8')).toBe('keep me\n');
+
+    output.clear();
+    await createProgram().parseAsync([
+      'node',
+      'spool',
+      '--config',
+      fixture.configPath,
+      'config',
+      'show',
+      '--json',
+    ]);
+    expect(JSON.parse(output.text())).toMatchObject({
+      repositories: [{ repository: 'example/widget', clones: [fixture.clone] }],
+    });
+  });
+
+  it('removes a now-empty repository pool and reports the pool cleanup', async () => {
+    const fixture = cliFixture();
+    const clone = createGitClone(
+      fixture.root,
+      'separate-pool-clone',
+      'git@github.com:example/separate.git',
+    );
+    configureAdditionalPool(fixture, 'git@github.com:Example/Separate.git', clone);
+    const output = captureStdout();
+
+    await createProgram().parseAsync([
+      'node',
+      'spool',
+      '--config',
+      fixture.configPath,
+      'config',
+      'repository',
+      'remove',
+      clone,
+    ]);
+
+    expect(output.text()).toContain(`Removed ${clone} and its now-empty example/separate pool.`);
+    expect(loadConfig(fixture.configPath).repositories).toEqual([
+      { repository: 'example/widget', clones: [fixture.clone] },
+    ]);
+  });
+
+  it('allows a symlink alias with released lease history and preserves that history', async () => {
+    const fixture = cliFixture();
+    const clone = createGitClone(
+      fixture.root,
+      'released-clone',
+      'git@github.com:example/widget.git',
+    );
+    const alias = path.join(fixture.root, 'released-clone-alias');
+    symlinkSync(clone, alias);
+    configureCloneInExistingPool(fixture, clone);
+    recordWorkspaceLease(fixture, clone, 'Released');
+    captureStdout();
+
+    await createProgram().parseAsync([
+      'node',
+      'spool',
+      '--config',
+      fixture.configPath,
+      'config',
+      'repository',
+      'remove',
+      alias,
+    ]);
+
+    const database = openLedgerDatabase(fixture.state);
+    expect(new LedgerRepository(database).listLeases()).toEqual([
+      expect.objectContaining({ canonicalWorkspace: clone, state: 'Released' }),
+    ]);
+    database.close();
+  });
+
+  it.each(['Held', 'ReleasePending', 'Quarantined'] as const)(
+    'rejects a repository clone with a %s lease and preserves configuration and history',
+    async (state) => {
+      const fixture = cliFixture();
+      const clone = createGitClone(
+        fixture.root,
+        `${state.toLowerCase()}-clone`,
+        'git@github.com:example/widget.git',
+      );
+      configureCloneInExistingPool(fixture, clone);
+      recordWorkspaceLease(fixture, clone, state);
+      const before = readFileSync(fixture.configPath, 'utf8');
+
+      await expect(
+        createProgram().parseAsync([
+          'node',
+          'spool',
+          '--config',
+          fixture.configPath,
+          'config',
+          'repository',
+          'remove',
+          clone,
+        ]),
+      ).rejects.toThrow(new RegExp(`${state}.*(recover|release|acknowledge)`, 'i'));
+
+      expect(readFileSync(fixture.configPath, 'utf8')).toBe(before);
+      const database = openLedgerDatabase(fixture.state);
+      expect(new LedgerRepository(database).getLease(clone)?.state).toBe(state);
+      database.close();
+    },
+  );
+
+  it('rejects the final repository clone and a live daemon without leaking lock ownership', async () => {
+    const finalFixture = cliFixture();
+    const finalBefore = readFileSync(finalFixture.configPath, 'utf8');
+    await expect(
+      createProgram().parseAsync([
+        'node',
+        'spool',
+        '--config',
+        finalFixture.configPath,
+        'config',
+        'repository',
+        'remove',
+        finalFixture.clone,
+      ]),
+    ).rejects.toThrow(/final configured repository clone.*add another clone/i);
+    expect(readFileSync(finalFixture.configPath, 'utf8')).toBe(finalBefore);
+
+    const lockProbeDatabase = openLedgerDatabase(finalFixture.state);
+    const lockProbe = new DaemonLock(lockProbeDatabase);
+    const lockProbeOwner = {
+      nonce: 'post-final-refusal',
+      pid: process.pid,
+      processStartIdentity: currentProcessStartIdentity(),
+    };
+    expect(() => lockProbe.acquire(lockProbeOwner, 30_000)).not.toThrow();
+    lockProbe.release(lockProbeOwner);
+    lockProbeDatabase.close();
+
+    const liveFixture = cliFixture();
+    const clone = createGitClone(
+      liveFixture.root,
+      'live-daemon-clone',
+      'git@github.com:example/widget.git',
+    );
+    configureCloneInExistingPool(liveFixture, clone);
+    const daemonDatabase = openLedgerDatabase(liveFixture.state);
+    const daemonLock = new DaemonLock(daemonDatabase);
+    const daemonOwner = {
+      nonce: 'live-removal-daemon',
+      pid: process.pid,
+      processStartIdentity: currentProcessStartIdentity(),
+    };
+    daemonLock.acquire(daemonOwner, 30_000);
+    await expect(
+      createProgram().parseAsync([
+        'node',
+        'spool',
+        '--config',
+        liveFixture.configPath,
+        'config',
+        'repository',
+        'remove',
+        clone,
+      ]),
+    ).rejects.toThrow(/stop.*daemon.*retry/i);
+    daemonLock.release(daemonOwner);
+    daemonDatabase.close();
+  });
+
+  it('releases daemon ownership after a config writer refusal', async () => {
+    const fixture = cliFixture();
+    const clone = createGitClone(
+      fixture.root,
+      'writer-locked',
+      'git@github.com:example/widget.git',
+    );
+    configureCloneInExistingPool(fixture, clone);
+    const before = readFileSync(fixture.configPath, 'utf8');
+    const writerLock = `${fixture.configPath}.lock`;
+    writeFileSync(writerLock, 'locked\n');
+    try {
+      await expect(
+        createProgram().parseAsync([
+          'node',
+          'spool',
+          '--config',
+          fixture.configPath,
+          'config',
+          'repository',
+          'remove',
+          clone,
+        ]),
+      ).rejects.toThrow(/another spool configuration update/i);
+    } finally {
+      unlinkSync(writerLock);
+    }
+    expect(readFileSync(fixture.configPath, 'utf8')).toBe(before);
+
+    const database = openLedgerDatabase(fixture.state);
+    const daemonLock = new DaemonLock(database);
+    const owner = {
+      nonce: 'post-writer-refusal',
+      pid: process.pid,
+      processStartIdentity: currentProcessStartIdentity(),
+    };
+    expect(() => daemonLock.acquire(owner, 30_000)).not.toThrow();
+    daemonLock.release(owner);
+    database.close();
+  });
+
+  it.each([
+    {
+      name: 'a nested configured-clone directory',
+      requestedPath: (fixture: ReturnType<typeof cliFixture>) => {
+        const nested = path.join(fixture.clone, 'nested-removal');
+        mkdirSync(nested);
+        return nested;
+      },
+      expected: /not configured/i,
+    },
+    {
+      name: 'an unconfigured directory',
+      requestedPath: (fixture: ReturnType<typeof cliFixture>) => {
+        const unconfigured = path.join(fixture.root, 'unconfigured-removal');
+        mkdirSync(unconfigured);
+        return unconfigured;
+      },
+      expected: /not configured/i,
+    },
+    {
+      name: 'a missing directory',
+      requestedPath: (fixture: ReturnType<typeof cliFixture>) =>
+        path.join(fixture.root, 'missing-removal'),
+      expected: /ENOENT|no such file/i,
+    },
+  ])('rejects $name without changing the config', async ({ requestedPath, expected }) => {
+    const fixture = cliFixture();
+    const before = readFileSync(fixture.configPath, 'utf8');
+
+    await expect(
+      createProgram().parseAsync([
+        'node',
+        'spool',
+        '--config',
+        fixture.configPath,
+        'config',
+        'repository',
+        'remove',
+        requestedPath(fixture),
+      ]),
+    ).rejects.toThrow(expected);
+    expect(readFileSync(fixture.configPath, 'utf8')).toBe(before);
+  });
+
+  it('sanitizes a hostile unconfigured repository-removal path', async () => {
+    const fixture = cliFixture();
+    const hostile = path.join(fixture.root, 'hostile\u001b[31m-removal');
+    mkdirSync(hostile);
+
+    let caught: unknown;
+    try {
+      await createProgram().parseAsync([
+        'node',
+        'spool',
+        '--config',
+        fixture.configPath,
+        'config',
+        'repository',
+        'remove',
+        hostile,
+      ]);
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught).toBeInstanceOf(Error);
+    expect((caught as Error).message).not.toContain('\u001b');
+    expect((caught as Error).message).toContain('hostile[31m-removal');
+  });
+
   it.each([
     {
       name: 'a missing path',
@@ -811,14 +1128,17 @@ describe('operator CLI commands', () => {
     expect(readFileSync(fixture.configPath, 'utf8')).toBe(before);
   });
 
-  it('documents repository addition in nested help', () => {
+  it('documents repository addition and stopped-daemon removal in nested help', () => {
     const config = createProgram().commands.find((command) => command.name() === 'config');
     const repository = config?.commands.find((command) => command.name() === 'repository');
     const add = repository?.commands.find((command) => command.name() === 'add');
+    const remove = repository?.commands.find((command) => command.name() === 'remove');
 
     expect(config?.helpInformation()).toContain('repository');
     expect(repository?.helpInformation()).toContain('add <path>');
+    expect(repository?.helpInformation()).toContain('remove <path>');
     expect(add?.description()).toContain('GitHub');
+    expect(remove?.description()).toContain('stopped');
   });
 
   it('sanitizes hostile clone paths in repository-add success output', async () => {
@@ -976,6 +1296,62 @@ function createGitClone(root: string, name: string, origin?: string): string {
   git(clone, ['commit', '-m', 'fixture']);
   if (origin !== undefined) git(clone, ['remote', 'add', 'origin', origin]);
   return realpathSync(clone);
+}
+
+function configureCloneInExistingPool(fixture: ReturnType<typeof cliFixture>, clone: string): void {
+  const source = readFileSync(fixture.configPath, 'utf8');
+  writeFileSync(
+    fixture.configPath,
+    source.replace(
+      `    clones: [${JSON.stringify(fixture.clone)}]`,
+      `    clones: [${JSON.stringify(fixture.clone)}, ${JSON.stringify(clone)}]`,
+    ),
+  );
+}
+
+function configureAdditionalPool(
+  fixture: ReturnType<typeof cliFixture>,
+  repository: string,
+  clone: string,
+): void {
+  const source = readFileSync(fixture.configPath, 'utf8');
+  writeFileSync(
+    fixture.configPath,
+    source.replace(
+      '  - repository: example/widget',
+      [
+        `  - repository: ${repository}`,
+        `    clones: [${JSON.stringify(clone)}]`,
+        '  - repository: example/widget',
+      ].join('\n'),
+    ),
+  );
+}
+
+function recordWorkspaceLease(
+  fixture: ReturnType<typeof cliFixture>,
+  workspace: string,
+  state: 'Held' | 'ReleasePending' | 'Released' | 'Quarantined',
+): void {
+  const database = openLedgerDatabase(fixture.state);
+  const ledger = new LedgerRepository(database);
+  const marker = `repository-removal-${state.toLowerCase()}-${randomUUID()}`;
+  const job = ledger.claimJob({
+    sourceMarker: marker,
+    sourcePath: path.join(fixture.vault, 'Week 29 of 2026.md'),
+    provider: 'fake',
+    directive: 'Review',
+    context: 'fixture',
+    repository: 'example/widget',
+  });
+  const attempt = ledger.prepareAttempt(job.id, path.join(fixture.state, 'logs', `${marker}.log`));
+  ledger.holdLease(workspace, job.id, attempt.id);
+  if (state === 'ReleasePending' || state === 'Released') {
+    ledger.transitionLease(workspace, 'ReleasePending');
+  }
+  if (state === 'Released') ledger.transitionLease(workspace, 'Released');
+  if (state === 'Quarantined') ledger.transitionLease(workspace, 'Quarantined', 'fixture');
+  database.close();
 }
 
 function createBareRepository(root: string, name: string): string {
