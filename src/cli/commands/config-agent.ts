@@ -24,6 +24,7 @@ import {
   type ProviderProbeRunner,
   type ProviderSetupStatus,
 } from '../../config/setup.js';
+import { redactSensitiveArgv } from '../../providers/argv.js';
 import type { BuiltinProviderName } from '../../providers/preflight.js';
 
 type ConfigAgentNotAddedReason =
@@ -107,8 +108,8 @@ export async function runConfigAgentAdd(
       const selected = await selectAgent(prompter, statuses);
       const status = statuses.find(({ definition }) => definition.name === selected)!;
       const expectedTarget = document.raw.providers[selected];
-      const choice = await collectProviderArgumentChoice(prompter, status.definition);
       showSelectedAgentWarnings(prompter, new Set([selected]));
+      const choice = await collectProviderArgumentChoice(prompter, status.definition);
 
       const [rechecked] = await detectProviders(
         prompter,
@@ -202,13 +203,13 @@ function formatReview(
           `  Enabled: ${String(previous.enabled)}`,
           `  Executable: ${sanitizeTerminalText(previous.executable)}`,
           `  Directive: ${sanitizeTerminalText(previous.directive ?? `@${status.definition.name}`)}`,
-          `  Default arguments: ${formatArguments(previous.defaultArgs)}`,
+          `  Default arguments: ${formatArguments(redactSensitiveArgv(previous.defaultArgs))}`,
         ]),
     'After:',
     `  Enabled: ${String(reviewed.enabled)}`,
     `  Executable: ${sanitizeTerminalText(reviewed.executable)}`,
     `  Directive: ${sanitizeTerminalText(reviewed.directive ?? `@${status.definition.name}`)}`,
-    `  Default arguments: ${formatArguments(reviewed.defaultArgs)}`,
+    `  Default arguments: ${formatArguments(redactSensitiveArgv(reviewed.defaultArgs))}`,
     ...formatProviderArgumentReview(
       providers,
       [status],
