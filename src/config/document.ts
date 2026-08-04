@@ -17,6 +17,7 @@ import {
   writeFileSync,
 } from 'node:fs';
 import path from 'node:path';
+import { isDeepStrictEqual } from 'node:util';
 
 import YAML from 'yaml';
 
@@ -29,6 +30,7 @@ import {
   rawConfigSchema,
 } from './schema.js';
 import { currentProcessStartIdentity, readProcessStartIdentity } from '../process-identity.js';
+import type { BuiltinProviderName } from '../providers/preflight.js';
 
 export class ConfigDocumentError extends Error {
   override readonly name = 'ConfigDocumentError';
@@ -165,6 +167,46 @@ export function mutateConfigDocument(
     if (candidate) removeIfPresent(candidate);
     if (ownsLock) removeIfPresent(lockPath);
   }
+}
+
+export function addBuiltinProvider(
+  configPath: string | undefined,
+  target: BuiltinProviderName,
+  reviewedProvider: RawConfig['providers'][string],
+  expectedTarget: RawConfig['providers'][string] | undefined,
+): RawConfigDocument {
+  if (expectedTarget?.enabled) {
+    throw new ConfigDocumentError(`Provider is already enabled: ${target}`);
+  }
+  if (!reviewedProvider.enabled) {
+    throw new ConfigDocumentError(`Reviewed provider must be enabled: ${target}`);
+  }
+
+  return mutateConfigDocument(configPath, (raw) => {
+    const currentTarget = raw.providers[target];
+    if (currentTarget?.enabled) {
+      throw new ConfigDocumentError(`Provider is already enabled: ${target}`);
+    }
+    if (!isDeepStrictEqual(currentTarget, expectedTarget)) {
+      throw new ConfigDocumentError(`Provider ${target} changed since it was reviewed`);
+    }
+
+    const reviewedDirective = (reviewedProvider.directive ?? `@${target}`).toLowerCase();
+    for (const [name, provider] of Object.entries(raw.providers)) {
+      if (name === target) continue;
+      const directive = provider.directive ?? `@${name}`;
+      if (directive.toLowerCase() === reviewedDirective) {
+        throw new ConfigDocumentError(
+          `Provider directive ${reviewedProvider.directive ?? `@${target}`} is already used by ${name}`,
+        );
+      }
+    }
+
+    raw.providers[target] = {
+      ...reviewedProvider,
+      defaultArgs: [...reviewedProvider.defaultArgs],
+    };
+  });
 }
 
 export function addWatchedFolder(configPath: string | undefined, folder: string): string[] {
