@@ -27,6 +27,12 @@ export interface DaemonLockEnvironment {
   processIdentity?: (pid: number) => string | null;
 }
 
+export const PROCESS_SCOPED_DAEMON_EXPIRATION = -1;
+
+export function daemonOwnershipWindowIsActive(expiresAt: number, now: number): boolean {
+  return expiresAt === PROCESS_SCOPED_DAEMON_EXPIRATION || expiresAt > now;
+}
+
 export class DaemonLockConflictError extends Error {
   readonly owner: DaemonOwnership;
 
@@ -50,6 +56,17 @@ export class DaemonLock {
 
   acquire(identity: DaemonOwnershipIdentity, durationMs: number): DaemonOwnership {
     if (durationMs <= 0) throw new Error('Daemon ownership duration must be positive');
+    return this.#acquire(identity, (now) => now + durationMs);
+  }
+
+  acquireProcessScoped(identity: DaemonOwnershipIdentity): DaemonOwnership {
+    return this.#acquire(identity, () => PROCESS_SCOPED_DAEMON_EXPIRATION);
+  }
+
+  #acquire(
+    identity: DaemonOwnershipIdentity,
+    expiration: (now: number) => number,
+  ): DaemonOwnership {
     return this.#database.immediate(() => {
       const now = this.#now();
       const current = this.#current();
@@ -57,13 +74,13 @@ export class DaemonLock {
       const currentProcessStillMatches =
         current !== null &&
         this.#processIdentity(current.pid) === current.processStartIdentity &&
-        current.expiresAt > now;
+        daemonOwnershipWindowIsActive(current.expiresAt, now);
       if (currentProcessStillMatches && !sameOwner) throw new DaemonLockConflictError(current);
 
       const owner: DaemonOwnership = {
         ...identity,
         heartbeatAt: now,
-        expiresAt: now + durationMs,
+        expiresAt: expiration(now),
       };
       this.#database.raw
         .prepare(

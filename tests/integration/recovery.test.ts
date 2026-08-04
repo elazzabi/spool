@@ -271,4 +271,32 @@ describe('crash recovery protocols', () => {
     expect(lock.heartbeat(live, 500)).toBe(false);
     expect(lock.heartbeat(staleRecovery, 500)).toBe(true);
   });
+
+  it('holds process-scoped daemon ownership until release or owner death', () => {
+    const { database } = openFixture();
+    let now = 1_000;
+    const identities = new Map<number, string | null>([
+      [10, 'start-a'],
+      [11, 'start-b'],
+    ]);
+    const lock = new DaemonLock(database, {
+      now: () => now,
+      processIdentity: (pid) => identities.get(pid) ?? null,
+    });
+    const firstIdentity = { nonce: 'nonce-a', pid: 10, processStartIdentity: 'start-a' };
+    const secondIdentity = { nonce: 'nonce-b', pid: 11, processStartIdentity: 'start-b' };
+
+    const released = lock.acquireProcessScoped(firstIdentity);
+    now += 31_000;
+    expect(() => lock.acquire(secondIdentity, 500)).toThrow(DaemonLockConflictError);
+    expect(lock.release(released)).toBe(true);
+    const afterRelease = lock.acquire(secondIdentity, 500);
+    expect(afterRelease.nonce).toBe('nonce-b');
+    expect(lock.release(afterRelease)).toBe(true);
+
+    lock.acquireProcessScoped(firstIdentity);
+    identities.set(10, null);
+    const afterOwnerDeath = lock.acquire(secondIdentity, 500);
+    expect(afterOwnerDeath.nonce).toBe('nonce-b');
+  });
 });

@@ -25,6 +25,7 @@ import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 
 import { defaultConfigPath, resolveConfiguredPath } from '../config/paths.js';
+import { daemonOwnershipWindowIsActive } from '../ledger/daemon-lock.js';
 
 export const MANAGED_INSTALL_FILENAME = 'managed-install.json';
 export const MANAGED_NODE_ABI = 137;
@@ -760,7 +761,7 @@ async function withConfiguredDaemonLock<T>(
       .get() as { pid: number; process_start_identity: string; expires_at: number } | undefined;
     if (
       owner &&
-      owner.expires_at > Date.now() &&
+      daemonOwnershipWindowIsActive(owner.expires_at, Date.now()) &&
       readProcessStartIdentity(owner.pid) === owner.process_start_identity
     ) {
       throw new DaemonActiveInstallError(owner.pid);

@@ -2,6 +2,7 @@ import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import {
   chmodSync,
+  existsSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
@@ -846,6 +847,7 @@ describe('operator CLI commands', () => {
       'git@github.com:example/widget.git',
     );
     configureCloneInExistingPool(liveFixture, clone);
+    const liveBefore = readFileSync(liveFixture.configPath, 'utf8');
     const daemonDatabase = openLedgerDatabase(liveFixture.state);
     const daemonLock = new DaemonLock(daemonDatabase);
     const daemonOwner = {
@@ -866,8 +868,83 @@ describe('operator CLI commands', () => {
         clone,
       ]),
     ).rejects.toThrow(/stop.*daemon.*retry/i);
+    expect(readFileSync(liveFixture.configPath, 'utf8')).toBe(liveBefore);
     daemonLock.release(daemonOwner);
     daemonDatabase.close();
+  });
+
+  it('rejects removal when the state directory is inside the workspace without touching it', async () => {
+    const fixture = cliFixture();
+    const retainedClone = createGitClone(
+      fixture.root,
+      'state-overlap-retained',
+      'git@github.com:example/widget.git',
+    );
+    configureCloneInExistingPool(fixture, retainedClone);
+    const nestedState = path.join(fixture.clone, 'spool-state');
+    mkdirSync(nestedState);
+    writeFileSync(
+      fixture.configPath,
+      readFileSync(fixture.configPath, 'utf8').replace(
+        JSON.stringify(fixture.state),
+        JSON.stringify(nestedState),
+      ),
+    );
+    const configBefore = readFileSync(fixture.configPath, 'utf8');
+    const checkoutBefore = directorySnapshot(fixture.clone);
+
+    await expect(
+      createProgram().parseAsync([
+        'node',
+        'spool',
+        '--config',
+        fixture.configPath,
+        'config',
+        'repository',
+        'remove',
+        fixture.clone,
+      ]),
+    ).rejects.toThrow(/state directory.*inside.*move.*outside.*retry/i);
+
+    expect(readFileSync(fixture.configPath, 'utf8')).toBe(configBefore);
+    expect(directorySnapshot(fixture.clone)).toEqual(checkoutBefore);
+    expect(readdirSync(nestedState)).toEqual([]);
+    expect(existsSync(`${fixture.configPath}.lock`)).toBe(false);
+    expect(existsSync(`${fixture.configPath}.backup`)).toBe(false);
+  });
+
+  it('rejects removal when the config file is inside the workspace without touching it', async () => {
+    const fixture = cliFixture();
+    const retainedClone = createGitClone(
+      fixture.root,
+      'config-overlap-retained',
+      'git@github.com:example/widget.git',
+    );
+    configureCloneInExistingPool(fixture, retainedClone);
+    const nestedConfig = path.join(fixture.clone, 'spool.config.yaml');
+    writeFileSync(nestedConfig, readFileSync(fixture.configPath));
+    const configBefore = readFileSync(nestedConfig);
+    const checkoutBefore = directorySnapshot(fixture.clone);
+    const stateBefore = directorySnapshot(fixture.state);
+
+    await expect(
+      createProgram().parseAsync([
+        'node',
+        'spool',
+        '--config',
+        nestedConfig,
+        'config',
+        'repository',
+        'remove',
+        fixture.clone,
+      ]),
+    ).rejects.toThrow(/configuration.*inside.*move.*outside.*retry/i);
+
+    expect(readFileSync(nestedConfig)).toEqual(configBefore);
+    expect(directorySnapshot(fixture.clone)).toEqual(checkoutBefore);
+    expect(directorySnapshot(fixture.state)).toEqual(stateBefore);
+    expect(existsSync(`${nestedConfig}.lock`)).toBe(false);
+    expect(existsSync(`${nestedConfig}.backup`)).toBe(false);
   });
 
   it('releases daemon ownership after a config writer refusal', async () => {
@@ -1234,6 +1311,26 @@ function captureStdout(): { text(): string; clear(): void } {
       chunks.length = 0;
     },
   };
+}
+
+function directorySnapshot(root: string): string[] {
+  const snapshot: string[] = [];
+  const visit = (directory: string): void => {
+    for (const entry of readdirSync(directory, { withFileTypes: true }).sort((left, right) =>
+      left.name.localeCompare(right.name),
+    )) {
+      const absolute = path.join(directory, entry.name);
+      const relative = path.relative(root, absolute);
+      if (entry.isDirectory()) {
+        snapshot.push(`directory:${relative}`);
+        visit(absolute);
+      } else {
+        snapshot.push(`file:${relative}:${readFileSync(absolute).toString('base64')}`);
+      }
+    }
+  };
+  visit(root);
+  return snapshot;
 }
 
 function compactStaticPresentation(value: string): string {
