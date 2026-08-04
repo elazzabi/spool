@@ -40,6 +40,15 @@ For screen readers and terminals that do not work well with cursor controls, use
 spool init --plain
 ```
 
+If you install or sign in to another supported agent after initialization, enroll one agent at a time without rerunning setup or editing YAML:
+
+```sh
+spool config agent add
+spool config agent add --plain
+```
+
+This guided command checks the agent CLI, asks you to review its access profile and literal arguments, and never handles provider credentials. Restart a running daemon after adding the agent.
+
 ## Managed installation and updates
 
 The installer selects the release archive for the current operating system, architecture, Node 24 runtime, and ABI. It verifies the release manifest, archive size, and SHA-256 digest before it runs candidate code.
@@ -282,6 +291,9 @@ spool logs --follow
 # Ask spool to cancel a job using the ID in its receipt.
 spool cancel TASK_ID
 
+# Enroll one supported coding agent installed or signed in after initialization.
+spool config agent add
+
 # After inspecting a quarantined clone. An active daemon handles the request on its next pass.
 spool workspace acknowledge /absolute/path/to/clone
 ```
@@ -309,6 +321,9 @@ Routine setup does not require hand-editing YAML:
 # Inspect effective settings. Secret-shaped arguments are redacted.
 spool config show
 
+# Enroll one supported built-in agent with guided safety review.
+spool config agent add
+
 # List, add, or remove watched Markdown folders.
 spool config watch list
 spool config watch add /path/to/another/notes-folder
@@ -319,11 +334,13 @@ spool config repository add ./another-widget
 spool config repository remove /path/to/old-widget
 ```
 
+`spool config agent add` enrolls one missing or disabled supported built-in agent at a time. It uses the same safety review as `spool init`: preflight checks, access-profile selection, dangerous-access confirmation, literal-argument validation, a readiness recheck, and a final configuration review. It reuses the provider CLI's existing sign-in state and does not log in, create sessions, or reload the daemon. Use `spool config agent add --plain` for line-oriented prompts.
+
 Watched folders and workspaces serve different sides of spool: watched folders contain the Markdown that creates jobs, while workspaces are the Git checkouts where agents run. Adding either kind of folder registers an existing directory; spool does not create it. Stop the daemon before removing either kind of folder. spool refuses to remove the final watched folder, a watched folder still referenced by unfinished work, the final repository clone, or a workspace with a non-released lease. Removal only updates the configuration; it does not delete the directory from disk.
 
 Restart the daemon after changing watched folders, repositories, providers, or provider arguments.
 
-YAML remains the inspectable source of truth for advanced changes. [`examples/spool.config.yaml`](examples/spool.config.yaml) documents the complete schema, including provider executables, literal argument arrays, polling, time zone, state location, and repository pools. With no `--config`, spool uses the platform's normal user configuration directory.
+YAML remains the inspectable source of truth for advanced or unsupported changes; it is not required to add a supported built-in agent. [`examples/spool.config.yaml`](examples/spool.config.yaml) documents the complete schema, including provider executables, literal argument arrays, polling, time zone, state location, and repository pools. With no `--config`, spool uses the platform's normal user configuration directory.
 
 Provider arguments are passed as an argv array, never through a shell. Keep API keys, tokens, authorization headers, passwords, and other credentials out of `defaultArgs`. Manual YAML bypasses the onboarding validation that rejects credential-shaped and spool-owned flags.
 

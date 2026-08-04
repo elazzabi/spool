@@ -41,6 +41,24 @@ describe('end-user distribution documentation', () => {
     expect(readme).toMatch(/configuration.*state.*logs.*Markdown/is);
   });
 
+  it('documents safe post-init enrollment without hiding the advanced YAML path', () => {
+    const quickStart = section('Quick start');
+    const everydayCommands = section('Everyday commands');
+    const configuration = section('Configuration');
+
+    expect(quickStart).toContain('spool config agent add');
+    expect(quickStart).toContain('spool config agent add --plain');
+    expect(everydayCommands).toContain('spool config agent add');
+    expect(configuration).toContain('spool config agent add');
+    expect(configuration).toMatch(/one supported.*agent.*same safety.*spool init/is);
+    expect(configuration).not.toMatch(/add(?:ing)?.*(?:provider|agent).*edit.*YAML/is);
+    expect(readme).toContain('Sign in through the provider CLI');
+    expect(readme).toMatch(/Choosing an agent's permissions and operating mode is up to you/i);
+    expect(configuration).toMatch(/Manual YAML bypasses.*validation/i);
+    expect(configuration).toMatch(/Restart the daemon.*providers/i);
+    expect(configuration).toMatch(/YAML remains.*advanced.*changes/i);
+  });
+
   it('keeps npm only as contributor tooling and removes registry publication metadata', () => {
     const development = section('Development');
     expect(development).toContain('npm ci');
