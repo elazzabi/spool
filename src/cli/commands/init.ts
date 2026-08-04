@@ -252,7 +252,10 @@ function existingConfigurationMessage(configPath: string): string {
     `  ${renderShellCommand(spoolArgv(config, 'config', 'watch', '--help'))}`,
     `  ${renderShellCommand(spoolArgv(config, 'config', 'repository', '--help'))}`,
     '',
-    'For providers, polling, time zone, or state storage, edit this YAML file directly.',
+    'Add another supported coding agent with:',
+    `  ${renderShellCommand(spoolArgv(config, 'config', 'agent', 'add'))}`,
+    '',
+    'For polling, time zone, or state storage, edit this YAML file directly.',
     'To start over or recover an unusable configuration, move this file aside and run spool init again.',
     'If the daemon is running, restart it after changes.',
   ].join('\n');
