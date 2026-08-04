@@ -17,6 +17,7 @@ import YAML from 'yaml';
 import { describe, expect, it } from 'vitest';
 
 import {
+  addBuiltinProvider,
   addRepositoryMapping,
   addWatchedFolder,
   assessConfigTarget,
@@ -146,6 +147,190 @@ describe('configuration documents', () => {
     expect(readFileSync(`${fixture.configPath}.backup`, 'utf8')).toBe(original);
     expect(lstatSync(fixture.configPath).mode & 0o777).toBe(0o600);
     expect(lstatSync(`${fixture.configPath}.backup`).mode & 0o777).toBe(0o600);
+  });
+
+  it('replaces only the reviewed disabled built-in provider and keeps an owner-only backup', () => {
+    const fixture = createFixture();
+    fixture.raw.providers.custom = {
+      enabled: true,
+      executable: 'custom-agent',
+      directive: '@custom',
+      defaultArgs: ['--existing'],
+    };
+    createConfigDocument(fixture.configPath, fixture.raw);
+    const before = readRawConfigDocument(fixture.configPath).raw;
+    const original = readFileSync(fixture.configPath, 'utf8');
+    const reviewed = cursorProvider();
+
+    const updated = addBuiltinProvider(
+      fixture.configPath,
+      'claude',
+      { ...reviewed, executable: 'claude', directive: '@claude' },
+      before.providers.claude,
+    );
+
+    expect(updated.raw).toEqual({
+      ...before,
+      providers: {
+        ...before.providers,
+        claude: { ...reviewed, executable: 'claude', directive: '@claude' },
+      },
+    });
+    expect(readFileSync(`${fixture.configPath}.backup`, 'utf8')).toBe(original);
+    expect(lstatSync(fixture.configPath).mode & 0o777).toBe(0o600);
+    expect(lstatSync(`${fixture.configPath}.backup`).mode & 0o777).toBe(0o600);
+  });
+
+  it('inserts a reviewed missing built-in provider without rebuilding the provider map', () => {
+    const fixture = createFixture();
+    fixture.raw.providers.custom = {
+      enabled: true,
+      executable: 'custom-agent',
+      directive: '@custom',
+      defaultArgs: ['--existing'],
+    };
+    delete fixture.raw.providers.claude;
+    createConfigDocument(fixture.configPath, fixture.raw);
+    const before = readRawConfigDocument(fixture.configPath).raw;
+    const reviewed = cursorProvider();
+
+    const updated = addBuiltinProvider(fixture.configPath, 'cursor', reviewed, undefined);
+
+    expect(updated.raw).toEqual({
+      ...before,
+      providers: { ...before.providers, cursor: reviewed },
+    });
+  });
+
+  it('refuses an already-enabled provider without writing a backup', () => {
+    const fixture = createFixture();
+    fixture.raw.providers.claude!.enabled = true;
+    createConfigDocument(fixture.configPath, fixture.raw);
+    const before = readRawConfigDocument(fixture.configPath);
+
+    expect(() =>
+      addBuiltinProvider(
+        fixture.configPath,
+        'claude',
+        { ...cursorProvider(), executable: 'claude', directive: '@claude' },
+        before.raw.providers.claude,
+      ),
+    ).toThrow(/already enabled/i);
+
+    expect(readFileSync(fixture.configPath, 'utf8')).toBe(before.source);
+    expect(existsSync(`${fixture.configPath}.backup`)).toBe(false);
+  });
+
+  it('rejects a case-insensitive directive collision without changing the document', () => {
+    const fixture = createFixture();
+    fixture.raw.providers.custom = {
+      enabled: true,
+      executable: 'custom-agent',
+      directive: '@CURSOR',
+      defaultArgs: [],
+    };
+    createConfigDocument(fixture.configPath, fixture.raw);
+    const before = readRawConfigDocument(fixture.configPath);
+
+    expect(() =>
+      addBuiltinProvider(fixture.configPath, 'cursor', cursorProvider(), undefined),
+    ).toThrow(/directive.*already used/i);
+
+    expect(readFileSync(fixture.configPath, 'utf8')).toBe(before.source);
+    expect(existsSync(`${fixture.configPath}.backup`)).toBe(false);
+  });
+
+  it.each([
+    {
+      name: 'a missing target appears',
+      initial: undefined,
+      fresh: { ...cursorProvider(), enabled: false },
+    },
+    {
+      name: 'a disabled target disappears',
+      initial: { ...cursorProvider(), enabled: false },
+      fresh: undefined,
+    },
+    {
+      name: 'a disabled target changes',
+      initial: { ...cursorProvider(), enabled: false },
+      fresh: { ...cursorProvider(), enabled: false, defaultArgs: ['--mode', 'ask'] },
+    },
+  ])('refuses target drift when $name', ({ initial, fresh }) => {
+    const fixture = createFixture();
+    fixture.raw.providers.custom = {
+      enabled: true,
+      executable: 'custom-agent',
+      directive: '@custom',
+      defaultArgs: [],
+    };
+    delete fixture.raw.providers.claude;
+    if (initial) fixture.raw.providers.cursor = initial;
+    createConfigDocument(fixture.configPath, fixture.raw);
+    const expected = readRawConfigDocument(fixture.configPath).raw.providers.cursor;
+    if (fresh) fixture.raw.providers.cursor = fresh;
+    else delete fixture.raw.providers.cursor;
+    writeFileSync(fixture.configPath, YAML.stringify(fixture.raw), { mode: 0o600 });
+    const concurrentSource = readFileSync(fixture.configPath, 'utf8');
+
+    expect(() =>
+      addBuiltinProvider(fixture.configPath, 'cursor', cursorProvider(), expected),
+    ).toThrow(/changed since it was reviewed/i);
+
+    expect(readFileSync(fixture.configPath, 'utf8')).toBe(concurrentSource);
+    expect(existsSync(`${fixture.configPath}.backup`)).toBe(false);
+  });
+
+  it('refuses a provider that becomes enabled after review', () => {
+    const fixture = createFixture();
+    fixture.raw.providers.cursor = { ...cursorProvider(), enabled: false };
+    createConfigDocument(fixture.configPath, fixture.raw);
+    const expected = readRawConfigDocument(fixture.configPath).raw.providers.cursor;
+    fixture.raw.providers.cursor.enabled = true;
+    writeFileSync(fixture.configPath, YAML.stringify(fixture.raw), { mode: 0o600 });
+    const concurrentSource = readFileSync(fixture.configPath, 'utf8');
+
+    expect(() =>
+      addBuiltinProvider(fixture.configPath, 'cursor', cursorProvider(), expected),
+    ).toThrow(/already enabled/i);
+
+    expect(readFileSync(fixture.configPath, 'utf8')).toBe(concurrentSource);
+    expect(existsSync(`${fixture.configPath}.backup`)).toBe(false);
+  });
+
+  it('preserves an unrelated concurrent update while replacing the unchanged target', () => {
+    const fixture = createFixture();
+    fixture.raw.providers.cursor = { ...cursorProvider(), enabled: false };
+    createConfigDocument(fixture.configPath, fixture.raw);
+    const expected = readRawConfigDocument(fixture.configPath).raw.providers.cursor;
+    fixture.raw.pollIntervalSeconds = 25;
+    writeFileSync(fixture.configPath, YAML.stringify(fixture.raw), { mode: 0o600 });
+    const concurrentSource = readFileSync(fixture.configPath, 'utf8');
+
+    const updated = addBuiltinProvider(fixture.configPath, 'cursor', cursorProvider(), expected);
+
+    expect(updated.raw.pollIntervalSeconds).toBe(25);
+    expect(updated.raw.providers.cursor).toEqual(cursorProvider());
+    expect(readFileSync(`${fixture.configPath}.backup`, 'utf8')).toBe(concurrentSource);
+  });
+
+  it('leaves the active document unchanged when the reviewed provider fails validation', () => {
+    const fixture = createFixture();
+    fixture.raw.providers.cursor = { ...cursorProvider(), enabled: false };
+    createConfigDocument(fixture.configPath, fixture.raw);
+    const before = readRawConfigDocument(fixture.configPath);
+
+    expect(() =>
+      addBuiltinProvider(
+        fixture.configPath,
+        'cursor',
+        { ...cursorProvider(), directive: 'cursor' },
+        before.raw.providers.cursor,
+      ),
+    ).toThrow(/provider directive/i);
+
+    expect(readFileSync(fixture.configPath, 'utf8')).toBe(before.source);
+    expect(existsSync(`${fixture.configPath}.backup`)).toBe(false);
   });
 
   it('merges into a normalized repository match without rewriting its stored identity', () => {
@@ -466,4 +651,13 @@ function createFixture(): {
     repositories: [{ repository: 'example/widget', clones: [clone] }],
   };
   return { root, configPath: path.join(root, 'config.yaml'), vault, secondVault, clone, raw };
+}
+
+function cursorProvider(): RawConfig['providers'][string] {
+  return {
+    enabled: true,
+    executable: 'cursor-agent',
+    directive: '@cursor',
+    defaultArgs: ['--mode', 'plan'],
+  };
 }
