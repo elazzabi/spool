@@ -100,7 +100,7 @@ describe('post-init agent enrollment', () => {
           name: 'cursor',
           enabled: true,
           directive: '@cursor',
-          defaultArgs: ['--mode', 'plan'],
+          defaultArgs: [],
         }),
       ]),
     );
@@ -502,7 +502,7 @@ function providerRunner(
             ? 'codex-cli 0.144.5'
             : provider === 'pi'
               ? (options.piVersion ?? 'pi 0.74.2')
-              : 'cursor-agent 2026.01.28-fd13201';
+              : 'cursor-agent 2026.07.23-e383d2b';
       return Promise.resolve({ ok: true, stdout: version, stderr: '' });
     }
     if (args[0] === 'auth') {
@@ -544,7 +544,7 @@ function providerRunner(
           ? 'resume --json'
           : provider === 'pi'
             ? '--mode json --session --session-dir --tools --offline --no-extensions --no-context-files --no-skills --no-prompt-templates --list-models'
-            : '--print stream-json --workspace --resume';
+            : '--trust --print stream-json --workspace --resume';
     return Promise.resolve({ ok: true, stdout, stderr: '' });
   });
 }

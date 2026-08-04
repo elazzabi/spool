@@ -10,8 +10,8 @@ import { evaluateBuiltinProviderPreflight } from '../../src/providers/preflight.
 import type { ProviderEventParseResult } from '../../src/providers/types.js';
 
 const fixtures = path.resolve('tests/fixtures/providers');
-const version = readFileSync(path.join(fixtures, 'cursor-2026.01.28.version.txt'), 'utf8');
-const help = '--print --output-format stream-json --workspace <path> --resume [chatId]';
+const version = readFileSync(path.join(fixtures, 'cursor-2026.07.23.version.txt'), 'utf8');
+const help = '--trust --print --output-format stream-json --workspace <path> --resume [chatId]';
 
 function supportedPreflight() {
   return evaluateBuiltinProviderPreflight({
@@ -41,19 +41,18 @@ function ingest(observations: ProviderObservationAccumulator, result: ProviderEv
   if (result.kind === 'events') for (const event of result.events) observations.ingest(event);
 }
 
-describe('Cursor Agent 2026.01.28 adapter', () => {
-  it('launches explicit stream JSON in the requested workspace with defaults unchanged', () => {
+describe('Cursor Agent 2026.07.23 adapter', () => {
+  it('trusts the registered workspace for headless launches without changing resume defaults', () => {
     const provider = new CursorProvider({
       executable: process.execPath,
-      defaultArgs: ['--mode', 'plan'],
+      defaultArgs: [],
       preflight: supportedPreflight(),
     });
     const fixture = launchFixture();
     const launch = provider.createLaunch({ ...fixture, prompt: 'review it' });
 
     expect(launch.args).toEqual([
-      '--mode',
-      'plan',
+      '--trust',
       '--print',
       '--output-format',
       'stream-json',
@@ -66,8 +65,6 @@ describe('Cursor Agent 2026.01.28 adapter', () => {
     );
     expect(launch.environmentAllowlist).not.toContain('CURSOR_API_KEY');
     expect(provider.inspectCommand('c6b62c6f-7ead-4fd6-9922-e952131177ff').args).toEqual([
-      '--mode',
-      'plan',
       '--resume',
       'c6b62c6f-7ead-4fd6-9922-e952131177ff',
     ]);
@@ -139,5 +136,16 @@ describe('Cursor Agent 2026.01.28 adapter', () => {
       new CursorProvider({ executable: process.execPath, defaultArgs: [], preflight: drift })
         .capabilities.launch,
     ).toBe(true);
+
+    const missingTrust = evaluateBuiltinProviderPreflight({
+      provider: 'cursor',
+      versionOutput: version,
+      probe: {
+        ok: true,
+        output: '--print --output-format stream-json --workspace <path> --resume [chatId]',
+      },
+    });
+    expect(missingTrust.status).toBe('unsupported');
+    expect(missingTrust.warnings[0]).toMatch(/trust/i);
   });
 });

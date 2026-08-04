@@ -22,7 +22,7 @@ export interface BuiltinProviderPreflightInput {
 const validatedBaselineVersions: Record<BuiltinProviderName, string> = {
   claude: '2.1.212',
   codex: '0.144.5',
-  cursor: '2026.01.28-fd13201',
+  cursor: '2026.07.23-e383d2b',
   pi: '0.74.2',
 };
 
@@ -137,11 +137,11 @@ function validateProbe(
   }
   if (
     provider === 'cursor' &&
-    !['--print', 'stream-json', '--workspace', '--resume'].every((flag) =>
+    !['--trust', '--print', 'stream-json', '--workspace', '--resume'].every((flag) =>
       normalized.includes(flag),
     )
   ) {
-    return 'Cursor help does not expose the required stream, workspace, and resume contract';
+    return 'Cursor help does not expose the required trust, stream, workspace, and resume contract';
   }
   if (
     provider === 'pi' &&

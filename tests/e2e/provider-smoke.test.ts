@@ -24,6 +24,7 @@ import {
 import { pruneTerminalAttemptLogs } from '../../src/providers/log-retention.js';
 
 interface SmokeModule {
+  readonly hasCompletedTaskReceipt: (source: string, provider: string) => boolean;
   readonly assertPiSmokeEvidence: (input: {
     readonly launchArgv: readonly string[];
     readonly inspectArgs: readonly string[];
@@ -39,9 +40,48 @@ const smokeModule = (await import(
   // @ts-expect-error The shipped smoke executable is intentionally plain JavaScript.
   '../../scripts/smoke-providers.mjs'
 )) as SmokeModule;
-const { assertPiSmokeEvidence, parseProviderWaiver, selectSmokeProviders } = smokeModule;
+const {
+  assertPiSmokeEvidence,
+  hasCompletedTaskReceipt,
+  parseProviderWaiver,
+  selectSmokeProviders,
+} = smokeModule;
 
 describe('provider smoke safety boundaries', () => {
+  it('recognizes completed fenced receipts for the requested provider task', () => {
+    const note = [
+      '- [x] @cursor Read the local marker.',
+      '  ```spool',
+      '  Task: cursor-task',
+      '  Status: Completed',
+      '  ```',
+      '- [ ] @codex Still pending.',
+      '  ```spool',
+      '  Task: codex-task',
+      '  Status: Queued',
+      '  ```',
+    ].join('\n');
+
+    expect(hasCompletedTaskReceipt(note, 'cursor')).toBe(true);
+    expect(hasCompletedTaskReceipt(note, 'codex')).toBe(false);
+
+    const laterProviderCompleted = [
+      '- [ ] @cursor Read the local marker.',
+      '  ```spool',
+      '  Task: cursor-task',
+      '  Status: Queued',
+      '  ```',
+      '- [x] @codex Read the local marker.',
+      '  ```spool',
+      '  Task: codex-task',
+      '  Status: Completed',
+      '  ```',
+    ].join('\n');
+
+    expect(hasCompletedTaskReceipt(laterProviderCompleted, 'cursor')).toBe(false);
+    expect(hasCompletedTaskReceipt(laterProviderCompleted, 'codex')).toBe(true);
+  });
+
   it('requires Pi by default and permits only an explicit pre-launch Pi waiver', () => {
     expect(selectSmokeProviders(parseProviderWaiver(''))).toEqual([
       'claude',
