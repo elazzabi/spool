@@ -12,6 +12,7 @@ import {
   listWatchedFolders,
   presentConfigurationSummary,
   presentWatchedFolders,
+  removeRepositoryCommand,
   removeWatchedFolderCommand,
 } from './commands/config.js';
 import { ClackStaticCliPresenter, sanitizeTerminalText } from './output.js';
@@ -205,6 +206,19 @@ export function createProgram(): Command {
       process.stdout.write(
         `Added ${sanitizeTerminalText(added.clone)} to ${sanitizeTerminalText(added.repository)}. Restart a running daemon to apply this change.\n`,
       );
+    });
+  repository
+    .command('remove <path>')
+    .description('remove an idle repository workspace while the daemon is stopped')
+    .action((clonePath: string, _options: unknown, command: Command) => {
+      const globals = command.optsWithGlobals<{ config?: string }>();
+      const removed = removeRepositoryCommand(globals.config, clonePath);
+      const clone = sanitizeTerminalText(removed.clone);
+      const repositoryIdentity = sanitizeTerminalText(removed.repository);
+      const detail = removed.poolRemoved
+        ? `Removed ${clone} and its now-empty ${repositoryIdentity} pool.`
+        : `Removed ${clone} from ${repositoryIdentity}.`;
+      process.stdout.write(`${detail} Start the daemon again to apply this change.\n`);
     });
   const watch = config.command('watch').description('manage watched Obsidian or Markdown folders');
   watch

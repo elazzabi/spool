@@ -7,16 +7,19 @@ import {
   addWatchedFolder,
   ConfigDocumentError,
   readRawConfigDocument,
+  removeRepositoryMapping,
+  type RepositoryRemovalResult,
   removeWatchedFolder,
 } from '../../config/document.js';
 import { loadConfig } from '../../config/load.js';
-import { canonicalExistingDirectory, isPathInside } from '../../config/paths.js';
+import { canonicalExistingDirectory, isPathInside, samePath } from '../../config/paths.js';
 import type { SpoolConfig } from '../../config/schema.js';
 import { deriveRepositoryMappings } from '../../config/setup.js';
 import { openLedgerDatabase } from '../../ledger/database.js';
 import {
   currentProcessStartIdentity,
   DaemonLock,
+  DaemonLockConflictError,
   type DaemonOwnershipIdentity,
 } from '../../ledger/daemon-lock.js';
 import { LedgerRepository } from '../../ledger/repositories.js';
@@ -108,6 +111,51 @@ export async function addRepositoryCommand(
   return { clone: mapping.clones[0], repository: mapping.repository };
 }
 
+export function removeRepositoryCommand(
+  configPath: string | undefined,
+  clonePath: string,
+): RepositoryRemovalResult {
+  const config = loadConfig(configPath);
+  let canonicalClone: string;
+  try {
+    canonicalClone = canonicalExistingDirectory(clonePath, process.cwd());
+  } catch (error) {
+    throw sanitizedConfigDocumentError(error);
+  }
+
+  const database = openLedgerDatabase(config.stateDirectory);
+  const daemonLock = new DaemonLock(database);
+  const owner: DaemonOwnershipIdentity = {
+    nonce: randomUUID(),
+    pid: process.pid,
+    processStartIdentity: currentProcessStartIdentity(),
+  };
+  let ownsDaemonLock = false;
+  try {
+    try {
+      daemonLock.acquire(owner, 30_000);
+      ownsDaemonLock = true;
+    } catch (error) {
+      if (error instanceof DaemonLockConflictError) {
+        throw new ConfigDocumentError(
+          `Cannot remove ${sanitizeTerminalText(canonicalClone)} while another spool daemon is running; stop the daemon and retry`,
+        );
+      }
+      throw error;
+    }
+
+    assertWorkspaceHasNoNonReleasedLease(new LedgerRepository(database), canonicalClone);
+    try {
+      return removeRepositoryMapping(config.configPath, canonicalClone);
+    } catch (error) {
+      throw sanitizedConfigDocumentError(error);
+    }
+  } finally {
+    if (ownsDaemonLock) daemonLock.release(owner);
+    database.close();
+  }
+}
+
 export function removeWatchedFolderCommand(
   configPath: string | undefined,
   folder: string,
@@ -160,6 +208,24 @@ function assertFolderHasNoDurableWork(ledger: LedgerRepository, folder: string):
       );
     }
   }
+}
+
+function assertWorkspaceHasNoNonReleasedLease(
+  ledger: LedgerRepository,
+  canonicalClone: string,
+): void {
+  const lease = ledger
+    .listLeases()
+    .find((candidate) => samePath(candidate.canonicalWorkspace, canonicalClone));
+  if (!lease || lease.state === 'Released') return;
+  throw new ConfigDocumentError(
+    `Cannot remove ${sanitizeTerminalText(canonicalClone)} while its workspace lease is ${lease.state}; recover or release the workspace, then retry`,
+  );
+}
+
+function sanitizedConfigDocumentError(error: unknown): ConfigDocumentError {
+  const message = error instanceof Error ? error.message : String(error);
+  return new ConfigDocumentError(sanitizeTerminalText(message));
 }
 
 function repositoryPoolLines(repositories: ConfigurationSummary['repositories']): string[] {
