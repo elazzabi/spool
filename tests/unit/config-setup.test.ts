@@ -753,7 +753,7 @@ function versionFor(provider: BuiltinProviderName): string {
   if (provider === 'claude') return '2.1.212';
   if (provider === 'codex') return '0.144.5';
   if (provider === 'pi') return '0.74.2';
-  return '2026.01.28-fd13201';
+  return '2026.07.23-e383d2b';
 }
 
 function createExecutableFixture(): { bin: string } {
@@ -800,7 +800,7 @@ function providerRunner() {
           ? 'resume --json'
           : provider === 'pi'
             ? '--mode json --session --session-dir --tools --offline --no-extensions --no-context-files --no-skills --no-prompt-templates --list-models'
-            : '--print stream-json --workspace --resume';
+            : '--trust --print stream-json --workspace --resume';
     return Promise.resolve({ ok: true, stdout, stderr: '' });
   };
   return vi.fn(runner);

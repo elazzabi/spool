@@ -234,7 +234,7 @@ spool uses the arguments you configure for each CLI. Choosing an agent's permiss
 
 spool reuses each CLI's normal signed-in configuration. Ambient API-key and OAuth-token environment variables are deliberately removed from note-driven child processes because provider output is projected back into your notes. Sign in through the provider CLI instead of putting credentials in spool configuration.
 
-The parsers are currently validated against Claude Code 2.1.212, Codex CLI 0.144.5, Cursor Agent 2026.01.28-fd13201, and `@earendil-works/pi-coding-agent` 0.74.2. Compatible versions can still run; spool warns when a version has not been validated and fails malformed runtime events conservatively.
+The parsers are currently validated against Claude Code 2.1.212, Codex CLI 0.144.5, Cursor Agent 2026.07.23-e383d2b, and `@earendil-works/pi-coding-agent` 0.74.2. Compatible versions can still run; spool warns when a version has not been validated and fails malformed runtime events conservatively.
 
 > **Pi boundary:** Pi's built-in read tools can access any file readable by your OS user, and a Pi configuration without Git tools cannot inspect Git diffs. Its configured tools are not path containment.
 

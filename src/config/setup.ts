@@ -174,11 +174,13 @@ export const providerSetupDefinitions: readonly ProviderSetupDefinition[] = [
     name: 'cursor',
     executable: 'cursor-agent',
     directive: '@cursor',
-    recommendedArgs: ['--mode', 'plan'],
+    recommendedArgs: [],
     authenticationArgs: ['about'],
     access: {
-      recommendedDescription: 'Use plan mode so Cursor proposes changes without applying them.',
-      customOnlyDescription: "Start without spool's recommended mode baseline.",
+      recommendedDescription:
+        "Use Cursor's default permission mode in spool's registered workspaces.",
+      customOnlyDescription:
+        'Start without additional Cursor defaults; registered workspaces are still trusted.',
       unrestricted: {
         label: 'Direct changes (dangerous)',
         args: ['--force'],
@@ -187,10 +189,19 @@ export const providerSetupDefinitions: readonly ProviderSetupDefinition[] = [
       },
     },
     argvPolicy: {
-      reservedArgs: ['-p', '--print', '--output-format', '--workspace', '--resume', '--continue'],
+      reservedArgs: [
+        '-p',
+        '--print',
+        '--output-format',
+        '--workspace',
+        '--trust',
+        '--resume',
+        '--continue',
+      ],
       deniedRules: [{ names: ['--force', '--yolo'] }],
     },
     adapterOwnedArgs: [
+      '--trust',
       '--print',
       '--output-format stream-json',
       '--workspace <workspace>',

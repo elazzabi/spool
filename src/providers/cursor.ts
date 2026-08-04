@@ -45,6 +45,7 @@ export class CursorProvider implements ProviderAdapter {
       target,
       args: [
         ...this.#options.defaultArgs,
+        '--trust',
         '--print',
         '--output-format',
         'stream-json',

@@ -181,6 +181,14 @@ export async function runProviderSmoke() {
           throw new Error(`${name} launch omitted configured flag ${flag}`);
       }
       const clone = clones.get(name);
+      if (name === 'cursor') {
+        if (!launch.argv.includes('--trust')) {
+          throw new Error('cursor launch omitted adapter-enforced --trust');
+        }
+        if (launch.argv.includes('--mode')) {
+          throw new Error('cursor smoke must use the default agent mode');
+        }
+      }
       if (name === 'pi') {
         assertPiSmokeEvidence({
           launchArgv: launch.argv,
@@ -219,10 +227,7 @@ export async function runProviderSmoke() {
       );
     }
     for (const name of selected) {
-      const taskRegion = new RegExp(
-        `@${name}[^\\n]*[\\s\\S]*?spool:receipt:start[^\\n]*[\\s\\S]*?Status: Completed[\\s\\S]*?spool:receipt:end`,
-      );
-      if (!taskRegion.test(transformedNote)) {
+      if (!hasCompletedTaskReceipt(transformedNote, name)) {
         throw new Error(`The weekly note did not receive ${name} completion evidence`);
       }
     }
@@ -286,7 +291,17 @@ export function smokeFlags(provider) {
       '--no-prompt-templates',
     ];
   }
-  return ['--mode', 'plan'];
+  return [];
+}
+
+export function hasCompletedTaskReceipt(source, provider) {
+  const escapedProvider = provider.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const task = new RegExp(`^\\s*- \\[[ xX]\\] @${escapedProvider}\\b[^\\n]*`, 'm').exec(source);
+  if (!task || task.index === undefined) return false;
+  const afterTask = source.slice(task.index + task[0].length);
+  const nextTask = /\n\s*- \[[ xX]\] @\w+\b/.exec(afterTask);
+  const region = nextTask?.index === undefined ? afterTask : afterTask.slice(0, nextTask.index);
+  return /```spool[\s\S]*?\bStatus: Completed\b[\s\S]*?```/.test(region);
 }
 
 function writeExecutableWrapper(target, executable, logPath) {
