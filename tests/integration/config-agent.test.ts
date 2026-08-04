@@ -38,6 +38,8 @@ afterEach(() => {
 describe('post-init agent enrollment', () => {
   it('replaces one disabled provider with the reviewed profile and leaves everything else intact', async () => {
     const fixture = createFixture();
+    fixture.raw.providers.codex!.defaultArgs = ['--api-key', 'old-secret'];
+    writeFileSync(fixture.configPath, yaml(fixture.raw), { mode: 0o600 });
     const before = readRawConfigDocument(fixture.configPath).raw;
     const prompter = new ScriptedPrompter({
       selections: ['codex', 'unrestricted', 'add'],
@@ -66,12 +68,11 @@ describe('post-init agent enrollment', () => {
         },
       },
     });
-    expect(prompter.notes.find(({ title }) => title === 'Review')?.message).toContain(
-      'Replace disabled Codex configuration',
-    );
-    expect(prompter.notes.find(({ title }) => title === 'Review')?.message).toContain(
-      fixture.configPath,
-    );
+    const review = prompter.notes.find(({ title }) => title === 'Review')?.message;
+    expect(review).toContain('Replace disabled Codex configuration');
+    expect(review).toContain(fixture.configPath);
+    expect(review).toContain('[REDACTED]');
+    expect(review).not.toContain('old-secret');
     expect(prompter.outros.at(-1)).toContain('Restart a running daemon');
     expect(prompter.closed).toBe(true);
   });
@@ -262,6 +263,9 @@ describe('post-init agent enrollment', () => {
     expect(prompter.notes.find(({ title }) => title === 'Pi access limits')?.message).toMatch(
       /host-readable/i,
     );
+    expect(prompter.events.indexOf('note:Pi access limits')).toBeLessThan(
+      prompter.events.indexOf('select:Pi access profile'),
+    );
     expect(prompter.notes.find(({ title }) => title === 'Review')?.message).toContain(
       '0.75.0 differs from validated baseline 0.74.2',
     );
@@ -406,6 +410,7 @@ class ScriptedPrompter implements SetupPrompter {
   readonly notes: Array<{ message: string; title?: string }> = [];
   readonly outros: string[] = [];
   readonly selectMessages: string[] = [];
+  readonly events: string[] = [];
   readonly #onConfirm: (() => void) | undefined;
   closed = false;
 
@@ -433,6 +438,7 @@ class ScriptedPrompter implements SetupPrompter {
 
   note(message: string, title?: string): void {
     this.notes.push({ message, ...(title === undefined ? {} : { title }) });
+    this.events.push(`note:${title ?? ''}`);
   }
 
   text(_message: string, defaultValue?: string): Promise<string> {
@@ -446,6 +452,7 @@ class ScriptedPrompter implements SetupPrompter {
     initialValue?: Value,
   ): Promise<Value> {
     this.selectMessages.push(message);
+    this.events.push(`select:${message}`);
     const value = this.#selections.shift() ?? initialValue;
     if (value instanceof Error) return Promise.reject(value);
     if (value === undefined) return Promise.reject(new Error('missing scripted selection'));
