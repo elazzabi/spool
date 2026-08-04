@@ -10,30 +10,35 @@ import {
   type PromptOption,
   type SetupPrompter,
 } from '../prompts.js';
+import {
+  detectProviders,
+  displayName,
+  formatAgentStatusSummary,
+  formatProviderArgumentReview,
+  formatUnavailableProviders,
+  reconcileProviderArgumentChoices,
+  showRetryNote,
+  showSelectedAgentWarnings,
+} from '../provider-enrollment.js';
 import { ConfigDocumentError } from '../../config/document.js';
 import { loadConfig } from '../../config/load.js';
 import { canonicalExistingDirectory, resolveConfigPath, samePath } from '../../config/paths.js';
 import { isIanaTimeZone, type RawConfig } from '../../config/schema.js';
 import type { BuiltinProviderName } from '../../providers/preflight.js';
 import {
-  assertProviderArgumentChoice,
   assessSetupConfiguration,
   defaultStateDirectory,
   deriveRepositoryMappings,
-  detectBuiltinProviders,
   mapSelectedProviders,
   publishSetupConfiguration,
   SetupError,
-  type ProviderAccessProfile,
   type ProviderArgumentChoice,
-  type ProviderSetupDefinition,
   type ProviderSetupStatus,
   type SetupConfigurationCandidate,
 } from '../../config/setup.js';
 import type { GitRunner } from '../../workspaces/git.js';
 
 type SetupMode = 'quickstart' | 'advanced';
-type AdditionalArgumentChoice = 'none' | 'add';
 type NotCreatedReason =
   'cancelled' | 'final-review-declined' | 'no-agents-selected' | 'no-ready-agents';
 
@@ -97,7 +102,7 @@ export async function runInit(options: RunInitOptions = {}): Promise<InitOutcome
       'quickstart',
     );
 
-    let providerStatuses = await detectProviders(prompter, options);
+    let providerStatuses = await detectProviders(prompter, providerDetectionOptions(options));
     if (!providerStatuses.some((status) => status.ready)) {
       return finishWithoutReadyAgent(prompter, providerStatuses);
     }
@@ -130,9 +135,8 @@ export async function runInit(options: RunInitOptions = {}): Promise<InitOutcome
     while (true) {
       const refreshedStatuses = await detectProviders(
         prompter,
-        options,
+        providerDetectionOptions(options, [...selected]),
         'Rechecking selected agents',
-        [...selected],
       );
       const latestStatuses = providerStatuses.map(
         (status) =>
@@ -272,23 +276,16 @@ export function formatInitResult(result: InitResult): string {
   ].join('\n');
 }
 
-async function detectProviders(
-  prompter: SetupPrompter,
+function providerDetectionOptions(
   options: RunInitOptions,
-  message = 'Checking Claude, Codex, Cursor, and Pi',
   providerNames?: readonly BuiltinProviderName[],
-): Promise<ProviderSetupStatus[]> {
-  return prompter.progress(
-    message,
-    () =>
-      detectBuiltinProviders({
-        ...(options.commandRunner === undefined ? {} : { commandRunner: options.commandRunner }),
-        ...(options.pathValue === undefined ? {} : { pathValue: options.pathValue }),
-        ...(providerNames === undefined ? {} : { providerNames }),
-        ...(options.environment === undefined ? {} : { environment: options.environment }),
-      }),
-    'Agent check complete',
-  );
+) {
+  return {
+    ...(options.commandRunner === undefined ? {} : { commandRunner: options.commandRunner }),
+    ...(options.pathValue === undefined ? {} : { pathValue: options.pathValue }),
+    ...(providerNames === undefined ? {} : { providerNames }),
+    ...(options.environment === undefined ? {} : { environment: options.environment }),
+  };
 }
 
 async function selectAgents(
@@ -340,7 +337,7 @@ async function collectDirectories(
         directories.push(canonical);
         break;
       } catch (error) {
-        retryNote(prompter, error);
+        showRetryNote(prompter, error);
       }
     }
   } while (await prompter.confirm(continueQuestion, false));
@@ -375,93 +372,6 @@ async function collectRepositories(
   return repositories;
 }
 
-async function reconcileProviderArgumentChoices(
-  prompter: SetupPrompter,
-  statuses: readonly ProviderSetupStatus[],
-  selected: ReadonlySet<BuiltinProviderName>,
-  choices: Map<BuiltinProviderName, ProviderArgumentChoice>,
-): Promise<void> {
-  for (const name of choices.keys()) {
-    if (!selected.has(name)) choices.delete(name);
-  }
-  for (const status of statuses) {
-    const { definition } = status;
-    if (!status.ready || !selected.has(definition.name) || choices.has(definition.name)) continue;
-    choices.set(definition.name, await collectProviderArgumentChoice(prompter, definition));
-  }
-}
-
-async function collectProviderArgumentChoice(
-  prompter: SetupPrompter,
-  definition: ProviderSetupDefinition,
-): Promise<ProviderArgumentChoice> {
-  let profile: ProviderAccessProfile;
-  while (true) {
-    const unrestricted = definition.access.unrestricted;
-    profile = await prompter.select<ProviderAccessProfile>(
-      `${displayName(definition.name)} access profile`,
-      [
-        {
-          value: 'recommended',
-          label: 'Recommended',
-          hint: definition.access.recommendedDescription,
-        },
-        ...(unrestricted === undefined
-          ? []
-          : [
-              {
-                value: 'unrestricted' as const,
-                label: unrestricted.label,
-                hint: unrestricted.warning,
-              },
-            ]),
-        {
-          value: 'custom-only',
-          label: 'Custom only',
-          hint: definition.access.customOnlyDescription,
-        },
-      ],
-      'recommended',
-    );
-    if (profile !== 'unrestricted' || unrestricted === undefined) break;
-    prompter.note(unrestricted.warning, `${displayName(definition.name)} unrestricted access`);
-    if (await prompter.confirm(`${unrestricted.warning} Continue?`, false)) break;
-  }
-
-  const addArguments = await prompter.select<AdditionalArgumentChoice>(
-    `Additional arguments for ${displayName(definition.name)}?`,
-    [
-      { value: 'none', label: 'No additional arguments' },
-      { value: 'add', label: 'Add literal argv entries' },
-    ],
-    'none',
-  );
-  const extraArgs: string[] = [];
-  if (addArguments === 'add') {
-    prompter.note(
-      'Each response becomes one literal argv entry and is never parsed as a shell command. Custom arguments can broaden file, process, network, tool, plugin, or configuration access. They apply to launches and inspect/resume commands; the provider validates their meaning.',
-      'Custom argument safety',
-    );
-    while (true) {
-      const argument = await prompter.text(
-        `Next literal argument for ${displayName(definition.name)} (leave empty to finish)`,
-        '',
-      );
-      if (argument.length === 0) break;
-      try {
-        const next = [...extraArgs, argument];
-        assertProviderArgumentChoice(definition, { profile, extraArgs: next });
-        extraArgs.push(argument);
-      } catch (error) {
-        retryNote(prompter, error);
-      }
-    }
-  }
-  const choice = { profile, extraArgs } satisfies ProviderArgumentChoice;
-  assertProviderArgumentChoice(definition, choice);
-  return choice;
-}
-
 async function collectAdvancedSettings(
   prompter: SetupPrompter,
   defaultStatePath?: string,
@@ -479,7 +389,7 @@ async function askTimeZone(prompter: SetupPrompter): Promise<string> {
   while (true) {
     const timeZone = await prompter.text('IANA time zone', detectedTimeZone());
     if (isIanaTimeZone(timeZone)) return timeZone;
-    retryNote(
+    showRetryNote(
       prompter,
       new SetupError(`Invalid IANA time zone: ${sanitizeTerminalText(timeZone)}`),
     );
@@ -491,7 +401,7 @@ async function askPollInterval(prompter: SetupPrompter): Promise<number> {
     const answer = await prompter.text('Polling interval in seconds (1-45)', '30');
     const value = Number(answer);
     if (Number.isInteger(value) && value >= 1 && value <= 45) return value;
-    retryNote(prompter, new SetupError('Polling interval must be a whole number from 1 to 45'));
+    showRetryNote(prompter, new SetupError('Polling interval must be a whole number from 1 to 45'));
   }
 }
 
@@ -506,7 +416,7 @@ async function assessCandidate(
       return assessSetupConfiguration(configPath, { ...raw, stateDirectory });
     } catch (error) {
       if (!(error instanceof SetupError) || !/state/i.test(error.message)) throw error;
-      retryNote(prompter, error);
+      showRetryNote(prompter, error);
       stateDirectory = await prompter.text('State directory', stateDirectory);
     }
   }
@@ -525,7 +435,7 @@ function formatSetupReview(
   return [
     `Mode: ${mode === 'quickstart' ? 'QuickStart' : 'Advanced'}`,
     ...formatAgentStatusSummary(statuses, selected),
-    ...formatProviderArgumentReview(candidate, statuses, selected, argumentChoices),
+    ...formatProviderArgumentReview(candidate.raw.providers, statuses, selected, argumentChoices),
     `Watched folders: ${candidate.raw.vaults.map(sanitizeTerminalText).join(', ')}`,
     `Git repositories: ${candidate.raw.repositories.map((repository) => sanitizeTerminalText(repository.repository)).join(', ')}`,
     `Time zone: ${sanitizeTerminalText(candidate.raw.timeZone)}`,
@@ -536,92 +446,17 @@ function formatSetupReview(
   ].join('\n');
 }
 
-function formatProviderArgumentReview(
-  candidate: SetupConfigurationCandidate,
-  statuses: readonly ProviderSetupStatus[],
-  selected: ReadonlySet<string>,
-  argumentChoices: ReadonlyMap<string, ProviderArgumentChoice>,
-): string[] {
-  const lines: string[] = [];
-  for (const status of statuses) {
-    const { definition } = status;
-    if (!selected.has(definition.name)) continue;
-    const profile = argumentChoices.get(definition.name)?.profile ?? 'recommended';
-    const configuredArgs = candidate.raw.providers[definition.name]?.defaultArgs ?? [];
-    lines.push(
-      `${displayName(definition.name)} [${profile === 'custom-only' ? 'CUSTOM ONLY' : profile.toUpperCase()}]`,
-      `  Configured defaultArgs: ${configuredArgs.length === 0 ? '(none)' : renderShellCommand(configuredArgs)}`,
-      `  Adapter-enforced: ${definition.adapterOwnedArgs.map(sanitizeTerminalText).join(', ')}`,
-    );
-  }
-  return lines;
-}
-
-function showSelectedAgentWarnings(
-  prompter: SetupPrompter,
-  selected: ReadonlySet<BuiltinProviderName>,
-): void {
-  if (!selected.has('pi')) return;
-  prompter.note(
-    'Pi is configured for file review with read, grep, find, and ls only. This is not an OS sandbox: Pi can read and send any host-readable file, including through absolute or parent-traversal paths, and it cannot inspect a Git diff with these defaults. Enable Pi only on a trusted machine and repository.',
-    'Pi access limits',
-  );
-}
-
-function formatAgentStatusSummary(
-  statuses: readonly ProviderSetupStatus[],
-  selected: ReadonlySet<string>,
-): string[] {
-  const enabled = statuses.filter((status) => selected.has(status.definition.name));
-  const disabled = statuses.filter(
-    (status) => status.ready && !selected.has(status.definition.name),
-  );
-  const unavailable = statuses.filter((status) => !status.ready);
-  return [
-    `Enabled: ${formatAgentNames(enabled)}`,
-    `Intentionally disabled: ${formatAgentNames(disabled)}`,
-    `Unavailable: ${formatUnavailable(unavailable)}`,
-  ];
-}
-
 function finishWithoutReadyAgent(
   prompter: SetupPrompter,
   statuses: readonly ProviderSetupStatus[],
 ): InitNotCreatedResult {
-  prompter.note(formatUnavailable(statuses), 'Agents found');
+  prompter.note(formatUnavailableProviders(statuses), 'Agents found');
   prompter.outro(noAgentRecoveryMessage());
   return { kind: 'not-created', reason: 'no-ready-agents' };
 }
 
-function formatAgentNames(statuses: readonly ProviderSetupStatus[]): string {
-  return statuses.length === 0
-    ? 'None'
-    : statuses.map((status) => displayName(status.definition.name)).join(', ');
-}
-
-function formatUnavailable(statuses: readonly ProviderSetupStatus[]): string {
-  return statuses.length === 0
-    ? 'None'
-    : statuses
-        .map(
-          (status) =>
-            `${displayName(status.definition.name)} (${sanitizeTerminalText(status.reason)})`,
-        )
-        .join(', ');
-}
-
 function noAgentRecoveryMessage(): string {
   return 'No configuration was written. Install or sign in to at least one supported agent CLI, then rerun spool init.';
-}
-
-function displayName(name: string): string {
-  const safe = sanitizeTerminalText(name);
-  return `${safe.charAt(0).toUpperCase()}${safe.slice(1)}`;
-}
-
-function retryNote(prompter: SetupPrompter, error: unknown): void {
-  const detail = sanitizeTerminalText(error instanceof Error ? error.message : String(error));
-  prompter.note(`${detail}. Please try again.`, 'Check this value');
 }
 
 function detectedTimeZone(): string {
