@@ -245,17 +245,13 @@ export function removeRepositoryMapping(
 
     if (!match) throw new ConfigDocumentError(`Clone is not configured: ${canonicalClone}`);
 
-    const cloneCount = raw.repositories.reduce(
-      (total, configuredRepository) => total + configuredRepository.clones.length,
-      0,
-    );
-    if (cloneCount === 1) {
+    const configuredRepository = raw.repositories[match.repositoryIndex]!;
+    if (raw.repositories.length === 1 && configuredRepository.clones.length === 1) {
       throw new ConfigDocumentError(
         'Cannot remove the final configured repository clone; add another clone first',
       );
     }
 
-    const configuredRepository = raw.repositories[match.repositoryIndex]!;
     const poolRemoved = configuredRepository.clones.length === 1;
     result = {
       clone: match.clone,

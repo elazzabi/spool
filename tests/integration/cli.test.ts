@@ -20,6 +20,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { createProgram, isMainEntrypoint } from '../../src/cli/index.js';
 import { loadConfig } from '../../src/config/load.js';
+import type { LeaseState } from '../../src/domain/job.js';
 import { openLedgerDatabase } from '../../src/ledger/database.js';
 import { currentProcessStartIdentity, DaemonLock } from '../../src/ledger/daemon-lock.js';
 import { LedgerRepository } from '../../src/ledger/repositories.js';
@@ -1331,7 +1332,7 @@ function configureAdditionalPool(
 function recordWorkspaceLease(
   fixture: ReturnType<typeof cliFixture>,
   workspace: string,
-  state: 'Held' | 'ReleasePending' | 'Released' | 'Quarantined',
+  state: LeaseState,
 ): void {
   const database = openLedgerDatabase(fixture.state);
   const ledger = new LedgerRepository(database);
