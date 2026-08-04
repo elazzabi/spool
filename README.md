@@ -192,7 +192,13 @@ The output explains whether each folder is eligible, unsafe, or leased, followed
 
 When a job finishes without changing its workspace, spool releases the folder for another job. If the workspace changed, spool quarantines it for human inspection rather than guessing whether the changes are valuable. After inspecting and restoring it to the state you want, check the generated Markdown action. If the daemon is stopped, use `spool workspace acknowledge /absolute/path/to/clone`.
 
-To stop using an idle workspace, stop the daemon and edit the configuration file shown by `spool config show`. Remove its path from `repositories[].clones`; if it is the pool's final clone, remove that repository entry instead. The configuration must retain at least one repository pool with at least one clone. Start the daemon again when you are done. This only unregisters the folder; it never deletes it from disk.
+To stop using an idle workspace, stop the daemon and run:
+
+```sh
+spool config repository remove /absolute/path/to/clone
+```
+
+The command requires the exact configured checkout directory to still exist. It refuses a workspace with a non-released lease, so recover or release Held, ReleasePending, or Quarantined work shown by `spool workspace list` before retrying. It removes an empty repository pool automatically when another pool remains, but refuses to remove the final configured repository clone; add another clone first. If the checkout was already moved or deleted, use `spool config show` to find the configuration file and carefully remove its path from `repositories[].clones`, removing the now-empty repository entry if needed while retaining at least one pool with one clone. Start the daemon again when you are done. Removing a workspace only unregisters its folder; spool never deletes the checkout from disk.
 
 ## Safety first
 
@@ -308,11 +314,12 @@ spool config watch list
 spool config watch add /path/to/another/notes-folder
 spool config watch remove /path/to/old/notes-folder
 
-# Add another existing checkout to a repository workspace pool.
+# Add or remove an existing checkout in a repository workspace pool.
 spool config repository add ./another-widget
+spool config repository remove /path/to/old-widget
 ```
 
-Watched folders and workspaces serve different sides of spool: watched folders contain the Markdown that creates jobs, while workspaces are the Git checkouts where agents run. Adding either kind of folder registers an existing directory; spool does not create it. Stop the daemon before removing a watched folder. spool refuses to remove the final watched folder or one still referenced by unfinished work, and it does not delete the directory from disk.
+Watched folders and workspaces serve different sides of spool: watched folders contain the Markdown that creates jobs, while workspaces are the Git checkouts where agents run. Adding either kind of folder registers an existing directory; spool does not create it. Stop the daemon before removing either kind of folder. spool refuses to remove the final watched folder, a watched folder still referenced by unfinished work, the final repository clone, or a workspace with a non-released lease. Removal only updates the configuration; it does not delete the directory from disk.
 
 Restart the daemon after changing watched folders, repositories, providers, or provider arguments.
 
