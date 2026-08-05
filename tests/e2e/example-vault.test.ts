@@ -19,10 +19,9 @@ import type {
 } from '../../src/providers/types.js';
 import { JobDispatcher, type ProviderRunner } from '../../src/scheduler/dispatcher.js';
 import { AttemptObserver } from '../../src/scheduler/observer.js';
-import { NoteProjector, providerDirectives } from '../../src/scheduler/projector.js';
+import { NoteProjector } from '../../src/scheduler/projector.js';
 import { Reconciler } from '../../src/scheduler/reconciler.js';
 import { runUntilConverged } from '../../src/scheduler/service.js';
-import { MarkdownNoteScanner } from '../../src/scheduler/scanner.js';
 import { WorkspacePool } from '../../src/workspaces/pool.js';
 
 const repository = 'example/widget';
@@ -399,15 +398,6 @@ function createRuntime(config: SpoolConfig, runner: ProviderRunner) {
     config.providers.map((provider) => aliasFakeProvider(provider.name, provider.defaultArgs)),
   );
   const workspaces = new WorkspacePool({ repositories: config.repositories, ledger });
-  const scanner = new MarkdownNoteScanner({
-    vaults: config.vaults,
-    providers: providerDirectives(config),
-    repositoryAliases: new Map(
-      config.repositories.flatMap(({ alias, repository }) =>
-        alias ? [[alias, repository] as const] : [],
-      ),
-    ),
-  });
   const projector = new NoteProjector({ config, ledger, outbox, now });
   const observer = new AttemptObserver({ config, ledger, projector, now });
   const dispatcher = new JobDispatcher({
@@ -426,7 +416,6 @@ function createRuntime(config: SpoolConfig, runner: ProviderRunner) {
     outbox,
     providers,
     workspaces,
-    scanner,
     projector,
     observer,
     dispatcher,
