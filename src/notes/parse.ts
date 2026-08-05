@@ -392,7 +392,11 @@ export function scanNote(source: string, options: NoteScanOptions): NoteScan {
           (conflict) => conflict.span.start >= itemStart && conflict.span.start < itemEnd,
         );
     const listAncestors = ancestors.filter(Boolean);
-    const githubTarget = findGitHubTarget(directive.directiveText, listAncestors);
+    const githubTarget = findGitHubTarget(
+      directive.directiveText,
+      listAncestors,
+      options.repositoryAliases,
+    );
     const dayHeading = dayAt(itemStart, headings);
     const childIndentation = task.continuationIndentation;
     const parsed: ParsedDirective = {

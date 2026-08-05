@@ -134,7 +134,7 @@ export class JobDispatcher {
         continue;
       }
       if (!job.repository) {
-        const reason = 'The directive has no direct or ancestor GitHub repository';
+        const reason = 'The directive has no direct or ancestor repository context';
         this.#queueDiagnostic(job, reason);
         this.#recordDispatchWaiting(job.id, 'repository_missing');
         result.unavailable.push({

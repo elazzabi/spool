@@ -16,6 +16,7 @@ interface RankedGitHubTarget {
 export function findGitHubTarget(
   directText: string,
   ancestors: readonly string[],
+  repositoryAliases: ReadonlyMap<string, string> = new Map(),
 ): GitHubTargetContext | undefined {
   let selected = findGitHubTargetInText(directText, 'direct');
   for (let index = ancestors.length - 1; index >= 0; index -= 1) {
@@ -23,8 +24,25 @@ export function findGitHubTarget(
     if (ancestor === undefined) continue;
     const inherited = findGitHubTargetInText(ancestor, 'ancestor');
     if (inherited && (!selected || inherited.rank > selected.rank)) selected = inherited;
+    if (index === 0) {
+      const aliased = findRepositoryAlias(ancestor, repositoryAliases);
+      if (aliased && (!selected || aliased.rank > selected.rank)) selected = aliased;
+    }
   }
   return selected?.context;
+}
+
+function findRepositoryAlias(
+  text: string,
+  repositoryAliases: ReadonlyMap<string, string>,
+): RankedGitHubTarget | undefined {
+  const repository = repositoryAliases.get(text.trim().toLowerCase());
+  return repository
+    ? {
+        context: { repository: { repository, provenance: 'ancestor' } },
+        rank: 2,
+      }
+    : undefined;
 }
 
 function findGitHubTargetInText(
