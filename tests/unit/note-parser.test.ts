@@ -229,12 +229,15 @@ describe('scanNote', () => {
       '- another-project',
       '  - woopayments',
       '    - [ ] @claude nested ancestor',
+      '- ![](https://example.com/icon.png)',
+      '  - woopayments',
+      '    - [ ] @claude nested below empty rendered outermost ancestor',
       '- [ ] @claude top-level woopayments',
     ].join('\n');
 
     const directives = scanNote(source, { providers, repositoryAliases }).directives;
 
-    expect(directives).toHaveLength(6);
+    expect(directives).toHaveLength(7);
     expect(directives.every((directive) => directive.context.repository === undefined)).toBe(true);
   });
 
