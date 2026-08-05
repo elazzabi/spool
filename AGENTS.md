@@ -18,3 +18,9 @@
 - Bias toward shipping the smallest change that satisfies the requested behavior.
 - Once the behavior works and the relevant tests pass, stop iterating and ship it.
 - Do not add speculative abstractions, unrequested edge-case machinery, or open-ended refinement loops.
+
+## Releases
+
+- A release version must be updated together in `package.json`, `package-lock.json`, and the Commander `.version(...)` declaration in `src/cli/index.ts`.
+- Before creating a release tag, run `npm run test:runtime` and `npm run release:validate-tag -- --tag v<version>`.
+- Release tags are immutable. If a pushed tag fails, fix the release on a new patch version instead of moving or recreating the failed tag.
