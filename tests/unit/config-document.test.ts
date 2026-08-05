@@ -21,6 +21,7 @@ import {
   addRepositoryMapping,
   addWatchedFolder,
   assessConfigTarget,
+  assignRepositoryAlias,
   createConfigDocument,
   mutateConfigDocument,
   readRawConfigDocument,
@@ -147,6 +148,88 @@ describe('configuration documents', () => {
     expect(readFileSync(`${fixture.configPath}.backup`, 'utf8')).toBe(original);
     expect(lstatSync(fixture.configPath).mode & 0o777).toBe(0o600);
     expect(lstatSync(`${fixture.configPath}.backup`).mode & 0o777).toBe(0o600);
+  });
+
+  it('assigns a normalized repository alias while preserving unrelated settings and a backup', () => {
+    const fixture = createFixture();
+    createConfigDocument(fixture.configPath, fixture.raw);
+    const original = readFileSync(fixture.configPath, 'utf8');
+
+    const repository = assignRepositoryAlias(
+      fixture.configPath,
+      'https://github.com/Example/Widget.git',
+      'Woo-Payments',
+    );
+
+    expect(repository).toEqual({
+      repository: 'example/widget',
+      alias: 'woo-payments',
+      clones: [fixture.clone],
+    });
+    const raw = readRawConfigDocument(fixture.configPath).raw;
+    expect(raw.repositories[0]).toEqual({
+      repository: 'example/widget',
+      alias: 'woo-payments',
+      clones: [fixture.clone],
+    });
+    expect(raw.pollIntervalSeconds).toBe(30);
+    expect(raw.providers).toEqual(fixture.raw.providers);
+    expect(readFileSync(`${fixture.configPath}.backup`, 'utf8')).toBe(original);
+  });
+
+  it('rejects an alias owned by another pool without changing source or backup state', () => {
+    const fixture = createFixture();
+    const secondClone = path.join(fixture.root, 'second-clone');
+    mkdirSync(secondClone);
+    fixture.raw.repositories[0]!.alias = 'shared-alias';
+    fixture.raw.repositories.push({ repository: 'example/second', clones: [secondClone] });
+    createConfigDocument(fixture.configPath, fixture.raw);
+    const original = readFileSync(fixture.configPath, 'utf8');
+
+    expect(() =>
+      assignRepositoryAlias(fixture.configPath, 'example/second', 'SHARED-ALIAS'),
+    ).toThrow(/alias.*already used/i);
+
+    expect(readFileSync(fixture.configPath, 'utf8')).toBe(original);
+    expect(existsSync(`${fixture.configPath}.backup`)).toBe(false);
+  });
+
+  it('rejects an unknown repository alias assignment without changing the document', () => {
+    const fixture = createFixture();
+    createConfigDocument(fixture.configPath, fixture.raw);
+    const original = readFileSync(fixture.configPath, 'utf8');
+
+    expect(() => assignRepositoryAlias(fixture.configPath, 'example/missing', 'missing')).toThrow(
+      /repository is not configured/i,
+    );
+
+    expect(readFileSync(fixture.configPath, 'utf8')).toBe(original);
+    expect(existsSync(`${fixture.configPath}.backup`)).toBe(false);
+  });
+
+  it('does not rewrite source or backup for an identical normalized alias assignment', () => {
+    const fixture = createFixture();
+    fixture.raw.repositories[0]!.alias = 'Woo-Payments';
+    createConfigDocument(fixture.configPath, fixture.raw);
+    writeFileSync(`${fixture.configPath}.backup`, 'existing backup\n', { mode: 0o600 });
+    const original = readFileSync(fixture.configPath, 'utf8');
+
+    const repository = assignRepositoryAlias(fixture.configPath, 'EXAMPLE/WIDGET', 'woo-payments');
+
+    expect(repository.alias).toBe('woo-payments');
+    expect(readFileSync(fixture.configPath, 'utf8')).toBe(original);
+    expect(readFileSync(`${fixture.configPath}.backup`, 'utf8')).toBe('existing backup\n');
+  });
+
+  it('replaces an existing repository alias with an available alias', () => {
+    const fixture = createFixture();
+    fixture.raw.repositories[0]!.alias = 'old-alias';
+    createConfigDocument(fixture.configPath, fixture.raw);
+
+    const repository = assignRepositoryAlias(fixture.configPath, 'example/widget', 'New-Alias');
+
+    expect(repository.alias).toBe('new-alias');
+    expect(readRawConfigDocument(fixture.configPath).raw.repositories[0]!.alias).toBe('new-alias');
   });
 
   it('replaces only the reviewed disabled built-in provider and keeps an owner-only backup', () => {
@@ -338,6 +421,7 @@ describe('configuration documents', () => {
     const secondClone = path.join(fixture.root, 'second-clone');
     mkdirSync(secondClone);
     fixture.raw.repositories[0]!.repository = 'https://github.com/Example/Widget.git';
+    fixture.raw.repositories[0]!.alias = 'widget';
     createConfigDocument(fixture.configPath, fixture.raw);
 
     const repositories = addRepositoryMapping(fixture.configPath, {
@@ -346,11 +430,16 @@ describe('configuration documents', () => {
     });
 
     expect(repositories).toEqual([
-      { repository: 'example/widget', clones: [fixture.clone, secondClone] },
+      {
+        repository: 'example/widget',
+        alias: 'widget',
+        clones: [fixture.clone, secondClone],
+      },
     ]);
     expect(readRawConfigDocument(fixture.configPath).raw.repositories).toEqual([
       {
         repository: 'https://github.com/Example/Widget.git',
+        alias: 'widget',
         clones: [fixture.clone, secondClone],
       },
     ]);
@@ -368,6 +457,7 @@ describe('configuration documents', () => {
     writeFileSync(untrackedMarker, 'untracked checkout contents\n');
     fixture.raw.repositories[0] = {
       repository: 'https://github.com/Example/Widget.git',
+      alias: 'widget',
       clones: [path.basename(fixture.clone), secondClone],
     };
     createConfigDocument(fixture.configPath, fixture.raw);
@@ -384,6 +474,7 @@ describe('configuration documents', () => {
     expect(raw.repositories).toEqual([
       {
         repository: 'https://github.com/Example/Widget.git',
+        alias: 'widget',
         clones: [secondClone],
       },
     ]);

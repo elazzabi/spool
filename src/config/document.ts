@@ -27,6 +27,7 @@ import {
   type RawConfig,
   type RepositoryConfig,
   normalizeGitHubRepository,
+  normalizeRepositoryAlias,
   rawConfigSchema,
 } from './schema.js';
 import { currentProcessStartIdentity, readProcessStartIdentity } from '../process-identity.js';
@@ -153,7 +154,12 @@ export function mutateConfigDocument(
 
     const identity = sourceIdentity(target);
     const raw = parseRawConfig(identity.source, target);
+    const originalRaw = structuredClone(raw);
     mutate(raw);
+    if (isDeepStrictEqual(raw, originalRaw)) {
+      assertSourceUnchanged(target, identity);
+      return { path: target, source: identity.source, raw };
+    }
     candidate = writeValidatedCandidate(target, raw);
     writeBackup(target, identity.source);
     assertSourceUnchanged(target, identity);
@@ -256,6 +262,50 @@ export function addRepositoryMapping(
   });
 
   return loadConfig(updated.path).repositories;
+}
+
+export function assignRepositoryAlias(
+  configPath: string | undefined,
+  repositoryIdentity: string,
+  aliasValue: string,
+): RepositoryConfig {
+  const target = existingSafeTarget(configPath);
+  const repository = normalizeGitHubRepository(repositoryIdentity);
+  const alias = normalizeRepositoryAlias(aliasValue);
+
+  const updated = mutateConfigDocument(target, (raw) => {
+    const configuredRepository = raw.repositories.find(
+      (candidate) => normalizeGitHubRepository(candidate.repository) === repository,
+    );
+    if (!configuredRepository) {
+      throw new ConfigDocumentError(`Repository is not configured: ${repository}`);
+    }
+
+    for (const candidate of raw.repositories) {
+      if (candidate === configuredRepository || candidate.alias === undefined) continue;
+      if (normalizeRepositoryAlias(candidate.alias) === alias) {
+        throw new ConfigDocumentError(
+          `Repository alias ${JSON.stringify(alias)} is already used by ${normalizeGitHubRepository(candidate.repository)}`,
+        );
+      }
+    }
+
+    if (
+      configuredRepository.alias !== undefined &&
+      normalizeRepositoryAlias(configuredRepository.alias) === alias
+    ) {
+      return;
+    }
+    configuredRepository.alias = alias;
+  });
+
+  const configuredRepository = loadConfig(updated.path).repositories.find(
+    (candidate) => candidate.repository === repository,
+  );
+  if (!configuredRepository) {
+    throw new ConfigDocumentError(`Repository is not configured: ${repository}`);
+  }
+  return configuredRepository;
 }
 
 export function removeRepositoryMapping(
