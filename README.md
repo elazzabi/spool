@@ -191,6 +191,14 @@ spool config repository add ~/src/widget-agent-2
 
 With those two workspaces, two jobs for `example/widget` can run concurrently. A third waits until one becomes available. spool never clones a repository, switches its branch, pulls changes, or cleans it on your behalf.
 
+Give the repository pool an optional alias when you want shorter Markdown context:
+
+```sh
+spool config repository alias example/widget widget
+```
+
+The repository remains canonically identified as `example/widget`; the alias is only a label that note dispatch can resolve to that pool.
+
 See the configured pools and the live state of every workspace with:
 
 ```sh
@@ -259,6 +267,16 @@ Repository and pull-request context can be inherited by several tasks:
   - [ ] Trace the retry path @cursor
 ```
 
+After assigning an alias, the complete rendered text of the outermost list item can provide the same repository context:
+
+```markdown
+- widget
+  - [ ] Update the onboarding guide @claude
+  - [ ] Trace the retry path @cursor
+```
+
+The alias must be the entire outermost label. spool does not match it in directive text, a nested ancestor, or a partial label such as `Project: widget`. Markdown formatting is fine only when the rendered label is still exactly the alias. The example above resolves `widget` to the canonical repository `example/widget`; jobs, prompts, and workspaces continue to use that canonical identity.
+
 Multiple directives for the same agent are independent jobs. A repository with several configured clones can run several jobs at once; extra jobs wait without disturbing the clones.
 
 ### Follow-ups stay in your notes
@@ -293,6 +311,9 @@ spool cancel TASK_ID
 
 # Enroll one supported coding agent installed or signed in after initialization.
 spool config agent add
+
+# Assign or replace the Markdown alias for a configured repository pool.
+spool config repository alias REPOSITORY ALIAS
 
 # After inspecting a quarantined clone. An active daemon handles the request on its next pass.
 spool workspace acknowledge /absolute/path/to/clone
@@ -332,13 +353,18 @@ spool config watch remove /path/to/old/notes-folder
 # Add or remove an existing checkout in a repository workspace pool.
 spool config repository add ./another-widget
 spool config repository remove /path/to/old-widget
+
+# Assign or replace the pool's Markdown alias using its canonical repository or GitHub URL.
+spool config repository alias example/widget widget
 ```
 
 `spool config agent add` enrolls one missing or disabled supported built-in agent at a time. It uses the same safety review as `spool init`: preflight checks, access-profile selection, dangerous-access confirmation, literal-argument validation, a readiness recheck, and a final configuration review. It reuses the provider CLI's existing sign-in state and does not log in, create sessions, or reload the daemon. Use `spool config agent add --plain` for line-oriented prompts.
 
 Watched folders and workspaces serve different sides of spool: watched folders contain the Markdown that creates jobs, while workspaces are the Git checkouts where agents run. Adding either kind of folder registers an existing directory; spool does not create it. Stop the daemon before removing either kind of folder. spool refuses to remove the final watched folder, a watched folder still referenced by unfinished work, the final repository clone, or a workspace with a non-released lease. Removal only updates the configuration; it does not delete the directory from disk.
 
-Restart the daemon after changing watched folders, repositories, providers, or provider arguments.
+Setting a new alias replaces the repository pool's existing alias. An alias starts and ends with an ASCII letter or number and otherwise contains only ASCII letters, numbers, or internal hyphens. spool normalizes it to lowercase, and aliases are globally unique case-insensitively across the installation. `spool init` does not generate aliases, and each repository pool can have at most one.
+
+Restart the daemon after changing watched folders, repositories, aliases, providers, or provider arguments. A restart loads an alias change for future scans; queued work may refresh its canonical repository context when rescanned, while launched or terminal work is not rewritten.
 
 YAML remains the inspectable source of truth for advanced or unsupported changes; it is not required to add a supported built-in agent. [`examples/spool.config.yaml`](examples/spool.config.yaml) documents the complete schema, including provider executables, literal argument arrays, polling, time zone, state location, and repository pools. With no `--config`, spool uses the platform's normal user configuration directory.
 

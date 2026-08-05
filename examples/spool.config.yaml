@@ -72,6 +72,8 @@ providers:
 
 repositories:
   - repository: github.com/example/widget
+    # Optional exact outermost Markdown list label. Commands normalize it to lowercase.
+    alias: widget
     clones:
       - /Users/you/src/widget-review-1
       - /Users/you/src/widget-review-2

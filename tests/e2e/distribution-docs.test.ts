@@ -6,6 +6,7 @@ import { describe, expect, it } from 'vitest';
 
 const repositoryRoot = fileURLToPath(new URL('../..', import.meta.url));
 const readme = readFileSync(path.join(repositoryRoot, 'README.md'), 'utf8');
+const exampleConfig = readFileSync(path.join(repositoryRoot, 'examples/spool.config.yaml'), 'utf8');
 const manifest = JSON.parse(readFileSync(path.join(repositoryRoot, 'package.json'), 'utf8')) as {
   packageManager?: string;
   publishConfig?: unknown;
@@ -57,6 +58,33 @@ describe('end-user distribution documentation', () => {
     expect(configuration).toMatch(/Manual YAML bypasses.*validation/i);
     expect(configuration).toMatch(/Restart the daemon.*providers/i);
     expect(configuration).toMatch(/YAML remains.*advanced.*changes/i);
+  });
+
+  it('documents repository alias setup and exact outermost Markdown usage', () => {
+    const workspaces = section('Workspaces are folders on purpose');
+    const noteDispatch = section('How note dispatch works');
+    const everydayCommands = section('Everyday commands');
+    const configuration = section('Configuration');
+    const aliasCommand = 'spool config repository alias example/widget widget';
+
+    expect(workspaces).toContain(aliasCommand);
+    expect(everydayCommands).toContain('spool config repository alias');
+    expect(configuration).toContain('spool config repository alias');
+    expect(configuration).toMatch(/replaces.*existing alias/i);
+    expect(configuration).toMatch(/restart the daemon.*alias/i);
+    expect(configuration).toMatch(/starts and ends.*ASCII letter or number/i);
+    expect(configuration).toMatch(/internal hyphens/i);
+    expect(configuration).toMatch(/lowercase.*globally unique.*case-insensitively/i);
+    expect(configuration).toMatch(/spool init.*does not.*alias/i);
+
+    expect(noteDispatch).toContain('- widget\n  - [ ] Update the onboarding guide @claude');
+    expect(noteDispatch).toMatch(/complete rendered text.*outermost list item/i);
+    expect(noteDispatch).toMatch(/not.*directive.*nested.*partial/i);
+    expect(noteDispatch).toMatch(/canonical.*example\/widget/i);
+
+    expect(exampleConfig).toMatch(
+      /- repository: github\.com\/example\/widget\n(?:\s+#.*\n)*\s+alias: widget\n\s+clones:/,
+    );
   });
 
   it('keeps npm only as contributor tooling and removes registry publication metadata', () => {
