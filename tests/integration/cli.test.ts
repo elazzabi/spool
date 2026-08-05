@@ -638,6 +638,146 @@ describe('operator CLI commands', () => {
     expect(compactStaticPresentation(output.text())).toContain(addedClone);
   });
 
+  it('assigns a normalized repository alias and reports the restart requirement', async () => {
+    const fixture = cliFixture();
+    const output = captureStdout();
+
+    await createProgram().parseAsync([
+      'node',
+      'spool',
+      '--config',
+      fixture.configPath,
+      'config',
+      'repository',
+      'alias',
+      'https://github.com/Example/Widget.git',
+      'Woo-Payments',
+    ]);
+
+    expect(output.text()).toContain('Assigned alias woo-payments to example/widget.');
+    expect(output.text()).toContain('Restart a running daemon to apply this change.');
+    expect(loadConfig(fixture.configPath).repositories).toEqual([
+      { repository: 'example/widget', alias: 'woo-payments', clones: [fixture.clone] },
+    ]);
+  });
+
+  it('keeps repeated alias assignment byte-stable and shows replacement in plain and JSON inspection', async () => {
+    const fixture = cliFixture();
+    const output = captureStdout();
+    const assign = (alias: string) =>
+      createProgram().parseAsync([
+        'node',
+        'spool',
+        '--config',
+        fixture.configPath,
+        'config',
+        'repository',
+        'alias',
+        'example/widget',
+        alias,
+      ]);
+
+    await assign('WooPayments');
+    const assigned = readFileSync(fixture.configPath, 'utf8');
+    await assign('WOOPAYMENTS');
+    expect(readFileSync(fixture.configPath, 'utf8')).toBe(assigned);
+
+    await assign('payments');
+    output.clear();
+    await createProgram().parseAsync([
+      'node',
+      'spool',
+      '--config',
+      fixture.configPath,
+      'config',
+      'show',
+    ]);
+    expect(output.text()).toContain('example/widget | alias: payments');
+    expect(compactStaticPresentation(output.text())).toContain(fixture.clone);
+
+    output.clear();
+    await createProgram().parseAsync([
+      'node',
+      'spool',
+      '--config',
+      fixture.configPath,
+      'config',
+      'show',
+      '--json',
+    ]);
+    expect(JSON.parse(output.text())).toMatchObject({
+      repositories: [{ repository: 'example/widget', alias: 'payments', clones: [fixture.clone] }],
+    });
+  });
+
+  it('rejects invalid repository alias assignments without mutating configuration', async () => {
+    const fixture = cliFixture();
+    const secondClone = createGitClone(
+      fixture.root,
+      'second-alias-clone',
+      'git@github.com:example/second.git',
+    );
+    configureAdditionalPool(fixture, 'example/second', secondClone);
+    writeFileSync(
+      fixture.configPath,
+      readFileSync(fixture.configPath, 'utf8').replace(
+        '  - repository: example/second\n',
+        '  - repository: example/second\n    alias: reserved\n',
+      ),
+    );
+
+    for (const [repository, alias, message] of [
+      ['example/missing', 'available', /not configured/i],
+      ['example/widget', 'not valid', /invalid repository alias/i],
+      ['example/widget', 'RESERVED', /already used by example\/second/i],
+    ] as const) {
+      const before = readFileSync(fixture.configPath, 'utf8');
+      await expect(
+        createProgram().parseAsync([
+          'node',
+          'spool',
+          '--config',
+          fixture.configPath,
+          'config',
+          'repository',
+          'alias',
+          repository,
+          alias,
+        ]),
+      ).rejects.toThrow(message);
+      expect(readFileSync(fixture.configPath, 'utf8')).toBe(before);
+    }
+  });
+
+  it('sanitizes terminal controls in repository alias command errors', async () => {
+    const fixture = cliFixture();
+
+    for (const [repository, alias] of [
+      ['example/missing\u001b[31m', 'available'],
+      ['example/widget', 'hostile\u001b[31m'],
+    ] as const) {
+      let caught: unknown;
+      try {
+        await createProgram().parseAsync([
+          'node',
+          'spool',
+          '--config',
+          fixture.configPath,
+          'config',
+          'repository',
+          'alias',
+          repository,
+          alias,
+        ]);
+      } catch (error) {
+        caught = error;
+      }
+
+      expect(caught).toBeInstanceOf(Error);
+      expect((caught as Error).message).not.toContain('\u001b');
+    }
+  });
+
   it('merges a relative same-origin clone into the existing pool without rewriting its identity', async () => {
     const fixture = cliFixture();
     const addedClone = createGitClone(
@@ -1217,16 +1357,21 @@ describe('operator CLI commands', () => {
     expect(readFileSync(fixture.configPath, 'utf8')).toBe(before);
   });
 
-  it('documents repository addition and stopped-daemon removal in nested help', () => {
+  it('documents repository addition, aliasing, and stopped-daemon removal in nested help', () => {
     const config = createProgram().commands.find((command) => command.name() === 'config');
     const repository = config?.commands.find((command) => command.name() === 'repository');
     const add = repository?.commands.find((command) => command.name() === 'add');
+    const alias = repository?.commands.find((command) => command.name() === 'alias');
     const remove = repository?.commands.find((command) => command.name() === 'remove');
 
     expect(config?.helpInformation()).toContain('repository');
     expect(repository?.helpInformation()).toContain('add <path>');
+    expect(repository?.helpInformation()).toContain('alias <repository> <alias>');
     expect(repository?.helpInformation()).toContain('remove <path>');
     expect(add?.description()).toContain('GitHub');
+    expect(alias?.description()).toContain('slug');
+    expect(alias?.helpInformation()).toContain('<repository>');
+    expect(alias?.helpInformation()).toContain('<alias>');
     expect(remove?.description()).toContain('stopped');
   });
 

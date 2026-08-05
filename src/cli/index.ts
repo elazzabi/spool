@@ -9,6 +9,7 @@ import { runConfigAgentAdd } from './commands/config-agent.js';
 import {
   addRepositoryCommand,
   addWatchedFolderCommand,
+  assignRepositoryAliasCommand,
   configurationSummary,
   listWatchedFolders,
   presentConfigurationSummary,
@@ -220,6 +221,24 @@ export function createProgram(): Command {
         `Added ${sanitizeTerminalText(added.clone)} to ${sanitizeTerminalText(added.repository)}. Restart a running daemon to apply this change.\n`,
       );
     });
+  repository
+    .command('alias <repository> <alias>')
+    .description('assign or replace a lowercase slug alias for a configured repository')
+    .action(
+      (repositoryIdentity: string, aliasValue: string, _options: unknown, command: Command) => {
+        const globals = command.optsWithGlobals<{ config?: string }>();
+        const configuredRepository = assignRepositoryAliasCommand(
+          globals.config,
+          repositoryIdentity,
+          aliasValue,
+        );
+        const repository = sanitizeTerminalText(configuredRepository.repository);
+        const alias = sanitizeTerminalText(configuredRepository.alias ?? aliasValue);
+        process.stdout.write(
+          `Assigned alias ${alias} to ${repository}. Restart a running daemon to apply this change.\n`,
+        );
+      },
+    );
   repository
     .command('remove <path>')
     .description('remove an idle repository workspace while the daemon is stopped')
