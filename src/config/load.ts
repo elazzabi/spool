@@ -8,6 +8,7 @@ import {
   type SpoolConfig,
   isIanaTimeZone,
   normalizeGitHubRepository,
+  normalizeRepositoryAlias,
   rawConfigSchema,
 } from './schema.js';
 import {
@@ -75,6 +76,9 @@ export function loadConfig(explicitPath?: string, options: LoadConfigOptions = {
     validateDayAliases(raw.dayAliases);
     const repositories = raw.repositories.map((repository) => ({
       repository: normalizeGitHubRepository(repository.repository),
+      ...(repository.alias === undefined
+        ? {}
+        : { alias: normalizeRepositoryAlias(repository.alias) }),
       clones: uniqueCanonicalDirectories(repository.clones, baseDirectory, 'clone'),
     }));
     validateRepositoryOwnership(repositories);
@@ -126,14 +130,24 @@ function validateDayAliases(aliases: Record<string, string[] | undefined>): void
 }
 
 function validateRepositoryOwnership(
-  repositories: Array<{ repository: string; clones: string[] }>,
+  repositories: Array<{ repository: string; alias?: string; clones: string[] }>,
 ): void {
   const repositoryNames = new Set<string>();
+  const repositoryAliases = new Map<string, string>();
   for (const item of repositories) {
     if (repositoryNames.has(item.repository)) {
       throw new ConfigError(`Duplicate repository mapping: ${item.repository}`);
     }
     repositoryNames.add(item.repository);
+    if (item.alias !== undefined) {
+      const previous = repositoryAliases.get(item.alias);
+      if (previous !== undefined) {
+        throw new ConfigError(
+          `Duplicate repository alias ${JSON.stringify(item.alias)} belongs to both ${previous} and ${item.repository}`,
+        );
+      }
+      repositoryAliases.set(item.alias, item.repository);
+    }
   }
 
   const clones = repositories.flatMap((item) =>

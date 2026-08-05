@@ -97,6 +97,61 @@ describe('configuration', () => {
     ]);
   });
 
+  it('normalizes a mixed-case repository alias while preserving canonical identity', () => {
+    const fixture = createFixture();
+    const yaml = validYaml(fixture).replace(
+      '  - repository: https://github.com/Example/Widget.git',
+      '  - repository: https://github.com/Example/Widget.git\n    alias: Woo-Payments',
+    );
+    writeFileSync(fixture.configPath, yaml);
+
+    expect(loadConfig(fixture.configPath, { pathValue: '' }).repositories).toEqual([
+      {
+        repository: 'example/widget',
+        alias: 'woo-payments',
+        clones: [realpathSync(fixture.cloneA), realpathSync(fixture.cloneB)],
+      },
+    ]);
+  });
+
+  it.each([
+    ['empty', ''],
+    ['whitespace-bearing', 'woo payments'],
+    ['slash-containing', 'woo/payments'],
+    ['URL-shaped', 'https://github.com/example/widget'],
+    ['leading hyphen', '-woopayments'],
+    ['trailing hyphen', 'woopayments-'],
+    ['punctuation-bearing', 'woo_payments'],
+  ])('rejects an %s repository alias', (_name, alias) => {
+    const fixture = createFixture();
+    const yaml = validYaml(fixture).replace(
+      '  - repository: https://github.com/Example/Widget.git',
+      `  - repository: https://github.com/Example/Widget.git\n    alias: ${JSON.stringify(alias)}`,
+    );
+    writeFileSync(fixture.configPath, yaml);
+
+    expect(() => loadConfig(fixture.configPath, { pathValue: '' })).toThrow(/alias/i);
+  });
+
+  it('rejects case-insensitive repository alias collisions', () => {
+    const fixture = createFixture();
+    const yaml = `${validYaml(fixture).replace(
+      '  - repository: https://github.com/Example/Widget.git',
+      '  - repository: https://github.com/Example/Widget.git\n    alias: WooPayments',
+    )}
+  - repository: example/other
+    alias: woopayments
+    clones:
+      - ${JSON.stringify(path.join(fixture.root, 'clone-other'))}
+`;
+    mkdirSync(path.join(fixture.root, 'clone-other'));
+    writeFileSync(fixture.configPath, yaml);
+
+    expect(() => loadConfig(fixture.configPath, { pathValue: '' })).toThrow(
+      /duplicate repository alias/i,
+    );
+  });
+
   it.each([
     ['poll interval', 'pollIntervalSeconds: 30', 'pollIntervalSeconds: 46'],
     ['time zone', 'timeZone: Europe/Istanbul', 'timeZone: Mars/Olympus_Mons'],

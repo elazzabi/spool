@@ -1,5 +1,7 @@
 import { z } from 'zod';
 
+const repositoryAlias = /^[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?$/;
+
 export const dayNames = [
   'monday',
   'tuesday',
@@ -23,6 +25,13 @@ const providerSchema = z.strictObject({
 
 const repositorySchema = z.strictObject({
   repository: z.string().trim().min(1),
+  alias: z
+    .string()
+    .regex(
+      repositoryAlias,
+      'repository alias must contain only ASCII letters, numbers, and internal hyphens',
+    )
+    .optional(),
   clones: z.array(z.string().trim().min(1)).min(1, 'repository pool needs at least one clone'),
 });
 
@@ -51,6 +60,7 @@ export interface ProviderConfig {
 
 export interface RepositoryConfig {
   repository: string;
+  alias?: string;
   clones: string[];
 }
 
@@ -66,6 +76,15 @@ export interface SpoolConfig {
 }
 
 const repositoryPart = /^[A-Za-z0-9](?:[A-Za-z0-9._-]*[A-Za-z0-9])?$/;
+
+export function normalizeRepositoryAlias(value: string): string {
+  if (!repositoryAlias.test(value)) {
+    throw new Error(
+      `Invalid repository alias: ${JSON.stringify(value)}; use ASCII letters, numbers, and internal hyphens`,
+    );
+  }
+  return value.toLowerCase();
+}
 
 export function normalizeGitHubRepository(value: string): string {
   const input = value.trim();
