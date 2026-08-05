@@ -117,6 +117,11 @@ export class Reconciler {
       new MarkdownNoteScanner({
         vaults: options.config.vaults,
         providers: providerDirectives(options.config),
+        repositoryAliases: new Map(
+          options.config.repositories.flatMap(({ alias, repository }) =>
+            alias ? [[alias, repository] as const] : [],
+          ),
+        ),
       });
     this.#projector =
       options.projector ??

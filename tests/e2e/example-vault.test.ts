@@ -253,6 +253,61 @@ describe('realistic copied example vault', () => {
     runtime.database.close();
   });
 
+  it('binds an alias-scoped queued directive to its canonical workspace after restart', async () => {
+    const fixture = createFixture(1, false);
+    const sourceNote = path.join(fixture.vault, 'Tasks.md');
+    writeFileSync(sourceNote, '- WooPayments\n  - [ ] Reconcile the ledger @codex\n');
+    const prompts: Array<{ cwd: string; prompt: string }> = [];
+    let launches = 0;
+    const runner: ProviderRunner = async (request, callbacks) => {
+      launches += 1;
+      prompts.push({
+        cwd: request.target.cwd.canonicalPath,
+        prompt: Buffer.from(request.prompt).toString('utf8'),
+      });
+      return fakeRun(8, callbacks);
+    };
+    const beforeRestart = createRuntime(fixture.config, runner);
+
+    await beforeRestart.reconciler.runPass();
+    const unresolvedPasses = await runUntilConverged(beforeRestart.reconciler);
+    const queued = beforeRestart.ledger.listJobs()[0];
+    expect(queued).toMatchObject({ repository: null, state: 'Queued' });
+    expect(
+      unresolvedPasses.flatMap((pass) =>
+        pass.dispatches.flatMap((dispatch) => dispatch.unavailable.map(({ reason }) => reason)),
+      ),
+    ).toContain('The directive has no direct or ancestor repository context');
+    expect(launches).toBe(0);
+
+    fixture.config.repositories[0]!.alias = 'woopayments';
+    await runUntilConverged(beforeRestart.reconciler);
+    expect(beforeRestart.ledger.getJob(queued!.id)).toMatchObject({
+      repository: null,
+      state: 'Queued',
+    });
+    expect(launches).toBe(0);
+    await beforeRestart.reconciler.shutdown();
+    beforeRestart.database.close();
+
+    const afterRestart = createRuntime(fixture.config, runner);
+    await runUntilConverged(afterRestart.reconciler);
+
+    expect(afterRestart.ledger.getJob(queued!.id)).toMatchObject({
+      repository,
+      state: 'Completed',
+    });
+    expect(launches).toBe(1);
+    expect(prompts).toHaveLength(1);
+    expect(prompts[0]?.cwd).toBe(realpathSync(fixture.clones[0]!));
+    expect(prompts[0]?.prompt).toContain('Repository (ancestor): example/widget');
+    expect(prompts[0]?.prompt).not.toContain('Repository (ancestor): woopayments');
+    expect(readFileSync(sourceNote, 'utf8')).toContain('Status: Completed');
+
+    await afterRestart.reconciler.shutdown();
+    afterRestart.database.close();
+  });
+
   it('skips a manually dirty clone without touching it and uses the next pool member', async () => {
     const fixture = createFixture(2, false);
     const dirtyClone = fixture.clones[0]!;
@@ -347,6 +402,11 @@ function createRuntime(config: SpoolConfig, runner: ProviderRunner) {
   const scanner = new MarkdownNoteScanner({
     vaults: config.vaults,
     providers: providerDirectives(config),
+    repositoryAliases: new Map(
+      config.repositories.flatMap(({ alias, repository }) =>
+        alias ? [[alias, repository] as const] : [],
+      ),
+    ),
   });
   const projector = new NoteProjector({ config, ledger, outbox, now });
   const observer = new AttemptObserver({ config, ledger, projector, now });

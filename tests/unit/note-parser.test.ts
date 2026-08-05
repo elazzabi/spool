@@ -184,6 +184,90 @@ describe('scanNote', () => {
     });
   });
 
+  it('resolves only an exact rendered outermost repository alias', () => {
+    const repositoryAliases = new Map([['woopayments', 'automattic/woocommerce-payments']]);
+    const source = [
+      '- **WooPayments**',
+      '  - [ ] @claude emphasized alias',
+      '- `WOOPAYMENTS`',
+      '  - [ ] @claude inline-code alias',
+      '- [WooPayments](https://example.com/projects/payments)',
+      '  - [ ] @claude linked alias',
+      '- [ ] WooPayments',
+      '  - [ ] @claude checkbox alias',
+    ].join('\n');
+
+    const directives = scanNote(source, { providers, repositoryAliases }).directives;
+
+    expect(directives).toHaveLength(4);
+    for (const directive of directives) {
+      expect(directive.context.repository).toEqual({
+        provenance: 'ancestor',
+        repository: 'automattic/woocommerce-payments',
+      });
+      expect(directive.context.pr).toBeUndefined();
+    }
+    expect(directives.map((directive) => directive.context.ancestors[0])).toEqual([
+      'WooPayments',
+      'WOOPAYMENTS',
+      'WooPayments',
+      'WooPayments',
+    ]);
+  });
+
+  it('does not resolve aliases from partial, decorated, direct, or nested text', () => {
+    const repositoryAliases = new Map([['woopayments', 'automattic/woocommerce-payments']]);
+    const source = [
+      '- unknown',
+      '  - [ ] @claude woopayments in directive prose',
+      '- woo',
+      '  - [ ] @claude partial',
+      '- Project: woopayments',
+      '  - [ ] @claude prefixed',
+      '- woopayments project',
+      '  - [ ] @claude suffixed',
+      '- another-project',
+      '  - woopayments',
+      '    - [ ] @claude nested ancestor',
+      '- [ ] @claude top-level woopayments',
+    ].join('\n');
+
+    const directives = scanNote(source, { providers, repositoryAliases }).directives;
+
+    expect(directives).toHaveLength(6);
+    expect(directives.every((directive) => directive.context.repository === undefined)).toBe(true);
+  });
+
+  it('preserves GitHub target ranking when an outermost alias is available', () => {
+    const repositoryAliases = new Map([['woopayments', 'automattic/woocommerce-payments']]);
+    const source = [
+      '- WooPayments',
+      '  - [ ] @claude inspect https://github.com/acme/widgets',
+      '  - Repository https://github.com/acme/explicit',
+      '    - [ ] @claude keep nearer explicit scope',
+      '  - [ ] @claude review https://github.com/acme/widgets/pull/42',
+    ].join('\n');
+
+    const [incidental, explicit, pullRequest] = scanNote(source, {
+      providers,
+      repositoryAliases,
+    }).directives;
+
+    expect(incidental?.context.repository).toEqual({
+      provenance: 'ancestor',
+      repository: 'automattic/woocommerce-payments',
+    });
+    expect(explicit?.context.repository).toEqual({
+      provenance: 'ancestor',
+      repository: 'acme/explicit',
+    });
+    expect(pullRequest?.context.repository).toEqual({
+      provenance: 'direct',
+      repository: 'acme/widgets',
+    });
+    expect(pullRequest?.context.pr?.url).toBe('https://github.com/acme/widgets/pull/42');
+  });
+
   it('keeps native control metadata out of nested directive context', () => {
     const source = [
       '## Monday',

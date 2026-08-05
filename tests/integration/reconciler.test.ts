@@ -10,13 +10,14 @@ import { openLedgerDatabase } from '../../src/ledger/database.js';
 import { OutboxRepository } from '../../src/ledger/outbox.js';
 import { LedgerRepository } from '../../src/ledger/repositories.js';
 import { FakeProvider } from '../../src/providers/fake.js';
+import { ProviderRegistry } from '../../src/providers/registry.js';
 import type { ProviderRunResult } from '../../src/providers/types.js';
 import { AttemptObserver } from '../../src/scheduler/observer.js';
 import { VaultWatcher } from '../../src/scheduler/watcher.js';
 import { MarkdownNoteScanner } from '../../src/scheduler/scanner.js';
 import { NoteProjector } from '../../src/scheduler/projector.js';
+import { Reconciler, type ReconciliationPassResult } from '../../src/scheduler/reconciler.js';
 import { ReconciliationService } from '../../src/scheduler/service.js';
-import type { Reconciler, ReconciliationPassResult } from '../../src/scheduler/reconciler.js';
 
 describe('Markdown note scanner ownership barrier', () => {
   it('processes an arbitrarily titled Markdown note without touching a text sibling', async () => {
@@ -225,6 +226,91 @@ describe('Markdown note scanner ownership barrier', () => {
       'Instruction (direct): Review https://github.com/acme/widgets/pull/42 carefully',
     );
     expect(second.claimable[0]?.context).not.toContain('carefully @fake');
+  });
+
+  it('propagates an immutable repository alias lookup into canonical scanned context', async () => {
+    const vault = mkdtempSync(path.join(tmpdir(), 'spool-scanner-repository-alias-'));
+    const note = path.join(vault, 'Tasks.md');
+    writeFileSync(
+      note,
+      [
+        '- WooPayments',
+        '  - [ ] @fake Review',
+        '    ```spool',
+        '    Task: alias-task',
+        '    Anchor: spool-alias-task',
+        '    ```',
+      ].join('\n'),
+    );
+    const repositoryAliases = new Map([['woopayments', 'example/widget']]);
+    const scanner = new MarkdownNoteScanner({
+      vaults: [vault],
+      providers: { fake: '@fake' },
+      repositoryAliases,
+    });
+    repositoryAliases.set('woopayments', 'other/repository');
+
+    const result = await scanner.scan(new Set(['alias-task']));
+
+    expect(result.claimable).toHaveLength(1);
+    expect(result.claimable[0]?.directive.context.repository).toEqual({
+      provenance: 'ancestor',
+      repository: 'example/widget',
+    });
+    expect(result.claimable[0]?.context).toContain('Repository (ancestor): example/widget');
+    expect(result.claimable[0]?.context).not.toContain('Repository (ancestor): woopayments');
+  });
+
+  it('does not refresh repository context for a terminal job after alias resolution changes', async () => {
+    const root = mkdtempSync(path.join(tmpdir(), 'spool-terminal-repository-alias-'));
+    const vault = path.join(root, 'vault');
+    const state = path.join(root, 'state');
+    mkdirSync(vault);
+    mkdirSync(state);
+    const note = path.join(vault, 'Tasks.md');
+    writeFileSync(
+      note,
+      [
+        '- WooPayments',
+        '  - [ ] @fake Review',
+        '    ```spool',
+        '    Task: terminal-alias-task',
+        '    Anchor: spool-terminal-alias-task',
+        '    ```',
+      ].join('\n'),
+    );
+    const database = openLedgerDatabase(state);
+    const ledger = new LedgerRepository(database);
+    const outbox = new OutboxRepository(database);
+    const config = projectorConfig(root, vault, state);
+    config.repositories = [{ repository: 'example/widget', alias: 'woopayments', clones: [] }];
+    const job = ledger.claimJob({
+      sourceMarker: 'terminal-alias-task',
+      sourcePath: note,
+      provider: 'fake',
+      directive: 'Original directive',
+      context: 'Original context',
+      repository: null,
+    });
+    ledger.requestCancellation(job.id);
+    const reconciler = new Reconciler({
+      config,
+      database,
+      ledger,
+      outbox,
+      providers: new ProviderRegistry([new FakeProvider({ executable: process.execPath })]),
+    });
+
+    await reconciler.runPass();
+
+    expect(ledger.getJob(job.id)).toMatchObject({
+      state: 'Cancelled',
+      directive: 'Original directive',
+      context: 'Original context',
+      repository: null,
+    });
+    await reconciler.shutdown();
+    database.close();
   });
 });
 

@@ -10,6 +10,7 @@ import { scanNote } from '../notes/parse.js';
 export interface MarkdownNoteScannerOptions {
   vaults: readonly string[];
   providers: Readonly<Record<string, string>>;
+  repositoryAliases?: ReadonlyMap<string, string>;
   idFactory?: () => string;
   filesystem?: MarkdownNoteFilesystem;
 }
@@ -73,6 +74,7 @@ export interface MarkdownNoteScanResult {
 export class MarkdownNoteScanner {
   readonly #vaults: readonly string[];
   readonly #providers: Readonly<Record<string, string>>;
+  readonly #repositoryAliases: ReadonlyMap<string, string>;
   readonly #idFactory: (() => string) | undefined;
   readonly #filesystem: MarkdownNoteFilesystem;
   readonly #bootstrappedHere = new Set<string>();
@@ -80,6 +82,7 @@ export class MarkdownNoteScanner {
   constructor(options: MarkdownNoteScannerOptions) {
     this.#vaults = [...options.vaults];
     this.#providers = { ...options.providers };
+    this.#repositoryAliases = new Map(options.repositoryAliases);
     this.#idFactory = options.idFactory;
     this.#filesystem = options.filesystem ?? defaultMarkdownNoteFilesystem;
   }
@@ -94,7 +97,10 @@ export class MarkdownNoteScanner {
 
     for (const notePath of notePaths) {
       const source = await readFile(notePath, 'utf8');
-      const before = scanNote(source, { providers: this.#providers });
+      const before = scanNote(source, {
+        providers: this.#providers,
+        repositoryAliases: this.#repositoryAliases,
+      });
       if (before.conflicts.length > 0) {
         diagnostics.push(
           ...before.conflicts.map((conflict) => ({ notePath, message: conflict.message })),
@@ -110,7 +116,7 @@ export class MarkdownNoteScanner {
       );
       const result = await bootstrapNoteIdentities(
         notePath,
-        { providers: this.#providers },
+        { providers: this.#providers, repositoryAliases: this.#repositoryAliases },
         this.#idFactory,
       );
       if (!result.changed) continue;
@@ -126,7 +132,10 @@ export class MarkdownNoteScanner {
     const scannedNotes: Array<{ notePath: string; note: ReturnType<typeof scanNote> }> = [];
     for (const notePath of notePaths) {
       const source = await readFile(notePath, 'utf8');
-      const note = scanNote(source, { providers: this.#providers });
+      const note = scanNote(source, {
+        providers: this.#providers,
+        repositoryAliases: this.#repositoryAliases,
+      });
       scannedNotes.push({ notePath, note });
       if (note.conflicts.length > 0) {
         if (!diagnostics.some((diagnostic) => diagnostic.notePath === notePath)) {

@@ -37,4 +37,20 @@ describe('compilePromptContext', () => {
       ].join('\n'),
     );
   });
+
+  it('renders only the canonical repository identity resolved from an alias', () => {
+    const directive = scanNote('- WooPayments\n  - [ ] @codex reconcile the ledger', {
+      providers: { codex: '@codex' },
+      repositoryAliases: new Map([['woopayments', 'automattic/woocommerce-payments']]),
+    }).directives[0];
+
+    expect(directive).toBeDefined();
+    expect(compilePromptContext(directive!)).toBe(
+      [
+        'Ancestor (list): WooPayments',
+        'Repository (ancestor): automattic/woocommerce-payments',
+        'Instruction (direct): reconcile the ledger',
+      ].join('\n'),
+    );
+  });
 });

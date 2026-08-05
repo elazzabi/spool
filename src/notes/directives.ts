@@ -1,5 +1,6 @@
 export interface NoteScanOptions {
   providers: Readonly<Record<string, string>>;
+  repositoryAliases?: ReadonlyMap<string, string>;
 }
 
 export interface SourceSpan {
