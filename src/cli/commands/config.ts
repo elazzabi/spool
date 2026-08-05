@@ -5,6 +5,7 @@ import { sanitizeTerminalText, type StaticCliPresenter } from '../output.js';
 import {
   addRepositoryMapping,
   addWatchedFolder,
+  assignRepositoryAlias,
   ConfigDocumentError,
   readRawConfigDocument,
   removeRepositoryMapping,
@@ -13,7 +14,7 @@ import {
 } from '../../config/document.js';
 import { loadConfig } from '../../config/load.js';
 import { canonicalExistingDirectory, isPathInside, samePath } from '../../config/paths.js';
-import type { SpoolConfig } from '../../config/schema.js';
+import type { RepositoryConfig, SpoolConfig } from '../../config/schema.js';
 import { deriveRepositoryMappings } from '../../config/setup.js';
 import { openLedgerDatabase } from '../../ledger/database.js';
 import {
@@ -109,6 +110,18 @@ export async function addRepositoryCommand(
   }
   addRepositoryMapping(document.path, mapping);
   return { clone: mapping.clones[0], repository: mapping.repository };
+}
+
+export function assignRepositoryAliasCommand(
+  configPath: string | undefined,
+  repositoryIdentity: string,
+  alias: string,
+): RepositoryConfig {
+  try {
+    return assignRepositoryAlias(configPath, repositoryIdentity, alias);
+  } catch (error) {
+    throw sanitizedConfigDocumentError(error);
+  }
 }
 
 export function removeRepositoryCommand(
@@ -249,7 +262,9 @@ function sanitizedConfigDocumentError(error: unknown): ConfigDocumentError {
 function repositoryPoolLines(repositories: ConfigurationSummary['repositories']): string[] {
   const lines: string[] = [];
   for (const repository of repositories) {
-    lines.push(sanitizeTerminalText(repository.repository));
+    const repositoryIdentity = sanitizeTerminalText(repository.repository);
+    const alias = repository.alias && ` | alias: ${sanitizeTerminalText(repository.alias)}`;
+    lines.push(`${repositoryIdentity}${alias || ''}`);
     for (const clone of repository.clones) lines.push(`  ${sanitizeTerminalText(clone)}`);
   }
   return lines;
