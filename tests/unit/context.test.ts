@@ -4,7 +4,7 @@ import { compilePromptContext } from '../../src/notes/context.js';
 import { scanNote } from '../../src/notes/parse.js';
 
 describe('compilePromptContext', () => {
-  it('uses a direct PR before an ancestor PR and labels every source', () => {
+  it('uses a direct PR before an ancestor PR without adding heading context', () => {
     const source = [
       '## Wednesday',
       '- Parent https://github.com/acme/parent/pull/1',
@@ -16,7 +16,6 @@ describe('compilePromptContext', () => {
     expect(directive?.context.pr?.provenance).toBe('direct');
     expect(compilePromptContext(directive!)).toBe(
       [
-        'Day (heading): Wednesday',
         'Ancestor (list): Parent https://github.com/acme/parent/pull/1',
         'PR (direct): https://github.com/acme/direct/pull/2',
         'Repository (direct): acme/direct',
