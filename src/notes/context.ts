@@ -91,9 +91,6 @@ function findGitHubTargetInText(
 
 export function compilePromptContext(directive: ParsedDirective): string {
   const lines: string[] = [];
-  if (directive.context.dayHeading) {
-    lines.push(`Day (heading): ${directive.context.dayHeading}`);
-  }
   for (const ancestor of directive.context.ancestors) {
     lines.push(`Ancestor (list): ${ancestor}`);
   }
