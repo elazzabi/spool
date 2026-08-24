@@ -6,13 +6,16 @@ import process from 'node:process';
 import { fileURLToPath, URL } from 'node:url';
 
 import {
+  DECLARED_RELEASE_RUNTIMES,
   DECLARED_RELEASE_TUPLES,
+  LEGACY_RELEASE_MANIFEST_FILENAME,
   RELEASE_CHECKSUMS_FILENAME,
-  RELEASE_NODE_ABI,
-  RELEASE_NODE_MAJOR,
   artifactFilename,
   extractReleaseArchive,
+  isDeclaredReleaseRuntime,
+  isDeclaredReleaseTuple,
   readReleaseArchive,
+  releaseTargetKey,
   sha256,
 } from './build-release.mjs';
 
@@ -44,7 +47,7 @@ const allowedRootEntries = new Set([
 
 export function verifyReleaseManifest(manifestPath) {
   const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
-  if (manifest.schemaVersion !== 1) throw new Error('Unsupported release manifest schema');
+  if (manifest.schemaVersion !== 2) throw new Error('Unsupported release manifest schema');
   if (typeof manifest.version !== 'string' || !manifest.version) {
     throw new Error('Release manifest is missing a version');
   }
@@ -57,20 +60,25 @@ export function verifyReleaseManifest(manifestPath) {
   const seen = new Set();
   for (const artifact of manifest.artifacts) {
     validateArtifactDescriptor(artifact, manifest.version);
-    const tupleKey = `${artifact.platform}-${artifact.architecture}`;
-    if (seen.has(tupleKey)) throw new Error(`Duplicate release tuple: ${tupleKey}`);
-    seen.add(tupleKey);
-    if (!isDeclaredTuple(artifact.platform, artifact.architecture)) {
-      throw new Error(`Release manifest contains undeclared tuple: ${tupleKey}`);
+    const targetKey = releaseTargetKey(artifact);
+    if (seen.has(targetKey)) throw new Error(`Duplicate release target: ${targetKey}`);
+    seen.add(targetKey);
+    if (!isDeclaredReleaseTuple(artifact.platform, artifact.architecture)) {
+      throw new Error(
+        `Release manifest contains undeclared tuple: ${artifact.platform}-${artifact.architecture}`,
+      );
     }
   }
-  for (const tuple of DECLARED_RELEASE_TUPLES) {
-    const tupleKey = `${tuple.platform}-${tuple.architecture}`;
-    if (!seen.has(tupleKey))
-      throw new Error(`Release manifest is missing declared tuple: ${tupleKey}`);
+  for (const runtime of DECLARED_RELEASE_RUNTIMES) {
+    for (const tuple of DECLARED_RELEASE_TUPLES) {
+      const targetKey = releaseTargetKey({ ...runtime, ...tuple });
+      if (!seen.has(targetKey)) {
+        throw new Error(`Release manifest is missing declared target: ${targetKey}`);
+      }
+    }
   }
-  if (seen.size !== DECLARED_RELEASE_TUPLES.length) {
-    throw new Error('Release manifest contains the wrong number of tuples');
+  if (seen.size !== DECLARED_RELEASE_TUPLES.length * DECLARED_RELEASE_RUNTIMES.length) {
+    throw new Error('Release manifest contains the wrong number of targets');
   }
 
   const checksumPath = path.join(manifestDirectory, RELEASE_CHECKSUMS_FILENAME);
@@ -92,6 +100,56 @@ export function verifyReleaseManifest(manifestPath) {
       throw new Error(`Release artifact digest mismatch: ${artifact.filename}`);
     }
     verifyArchiveContents(archivePath, artifact, manifest.version);
+  }
+  verifyLegacyReleaseManifest(
+    path.join(manifestDirectory, LEGACY_RELEASE_MANIFEST_FILENAME),
+    manifest,
+  );
+  return manifest;
+}
+
+export function verifyLegacyReleaseManifest(manifestPath, fullManifest) {
+  const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
+  if (
+    manifest.schemaVersion !== 1 ||
+    typeof manifest.version !== 'string' ||
+    !/^[0-9a-f]{40}$/i.test(manifest.sourceRevision) ||
+    !Array.isArray(manifest.artifacts) ||
+    manifest.artifacts.length !== DECLARED_RELEASE_TUPLES.length
+  ) {
+    throw new Error('Legacy release manifest is invalid');
+  }
+  if (
+    fullManifest &&
+    (manifest.version !== fullManifest.version ||
+      manifest.sourceRevision !== fullManifest.sourceRevision)
+  ) {
+    throw new Error('Legacy release manifest metadata does not match the full manifest');
+  }
+  const seen = new Set();
+  for (const artifact of manifest.artifacts) {
+    validateArtifactDescriptor(artifact, manifest.version);
+    const tuple = `${artifact.platform}-${artifact.architecture}`;
+    if (
+      artifact.nodeMajor !== 24 ||
+      artifact.nodeAbi !== 137 ||
+      !isDeclaredReleaseTuple(artifact.platform, artifact.architecture) ||
+      seen.has(tuple)
+    ) {
+      throw new Error(`Legacy release manifest has an invalid target: ${tuple}`);
+    }
+    seen.add(tuple);
+    if (fullManifest) {
+      const matchingArtifact = fullManifest.artifacts.find(
+        (candidate) => releaseTargetKey(candidate) === releaseTargetKey(artifact),
+      );
+      if (JSON.stringify(matchingArtifact) !== JSON.stringify(artifact)) {
+        throw new Error(`Legacy release artifact does not match the full manifest: ${tuple}`);
+      }
+    }
+  }
+  if (seen.size !== DECLARED_RELEASE_TUPLES.length) {
+    throw new Error('Legacy release manifest matrix is incomplete');
   }
   return manifest;
 }
@@ -217,9 +275,9 @@ try {
 }
 
 function validateArtifactDescriptor(artifact, version) {
-  if (artifact.nodeMajor !== RELEASE_NODE_MAJOR || artifact.nodeAbi !== RELEASE_NODE_ABI) {
+  if (!isDeclaredReleaseRuntime(artifact.nodeMajor, artifact.nodeAbi)) {
     throw new Error(
-      `Release artifact ${artifact.filename ?? '<unknown>'} must declare Node ${RELEASE_NODE_MAJOR} ABI ${RELEASE_NODE_ABI}`,
+      `Release artifact ${artifact.filename ?? '<unknown>'} declares an unsupported Node runtime`,
     );
   }
   const expectedFilename = artifactFilename({ version, ...artifact });
@@ -303,12 +361,6 @@ function inspectRuntime(runtimePath) {
   const result = spawnSync(runtimePath, ['-p', expression], { encoding: 'utf8' });
   if (result.status !== 0) throw new Error(`Could not inspect Node runtime:\n${result.stderr}`);
   return JSON.parse(result.stdout);
-}
-
-function isDeclaredTuple(platform, architecture) {
-  return DECLARED_RELEASE_TUPLES.some(
-    (tuple) => tuple.platform === platform && tuple.architecture === architecture,
-  );
 }
 
 function parseArguments(argv) {

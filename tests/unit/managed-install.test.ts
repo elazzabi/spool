@@ -46,7 +46,9 @@ describe('managed release installation', () => {
     });
 
     expect(result).toMatchObject({ status: 'installed', exitCode: 0, version: '1.2.3' });
-    expect(readlinkSync(path.join(fixture.prefix, 'lib/spool/current'))).toBe('versions/1.2.3');
+    expect(readlinkSync(path.join(fixture.prefix, 'lib/spool/current'))).toBe(
+      'versions/1.2.3-abi137',
+    );
     expect(readlinkSync(path.join(fixture.prefix, 'bin/spool'))).toBe(
       '../lib/spool/current/bin/spool',
     );
@@ -61,11 +63,100 @@ describe('managed release installation', () => {
       releaseSource: 'https://example.test/releases/download/v1.2.3',
       artifactDigest: 'a'.repeat(64),
       nodeAbi: 137,
+      releaseDirectory: '1.2.3-abi137',
       activePrefix: realpathSync(fixture.prefix),
     });
     expect(smokeDirectories).toHaveLength(1);
     expect(existsSync(smokeDirectories[0]!)).toBe(false);
     expect(userDataSnapshot(fixture.userData)).toEqual(before);
+  });
+
+  it('installs a Node 26 ABI 147 candidate', async () => {
+    const fixture = installFixture('1.2.3');
+    const runtimePath = path.join(fixture.candidate, 'release-runtime.json');
+    const runtime = JSON.parse(readFileSync(runtimePath, 'utf8')) as Record<string, unknown>;
+    writeFileSync(runtimePath, `${JSON.stringify({ ...runtime, nodeMajor: 26, nodeAbi: 147 })}\n`);
+
+    const result = await installManagedRelease(
+      { ...fixture.request, nodeAbi: 147 },
+      {
+        ...testDependencies(),
+        runtimeIdentity: {
+          platform: process.platform,
+          architecture: process.arch,
+          nodeMajor: 26,
+          nodeAbi: 147,
+        },
+      },
+    );
+
+    expect(result).toMatchObject({ status: 'installed', version: '1.2.3' });
+    expect(readManagedInstallOwnership(fixture.prefix)?.nodeAbi).toBe(147);
+  });
+
+  it('replaces the active runtime when the same version is reinstalled for another ABI', async () => {
+    const fixture = installFixture('1.2.3');
+    await installManagedRelease(fixture.request, testDependencies());
+    const runtimePath = path.join(fixture.candidate, 'release-runtime.json');
+    const runtime = JSON.parse(readFileSync(runtimePath, 'utf8')) as Record<string, unknown>;
+    writeFileSync(runtimePath, `${JSON.stringify({ ...runtime, nodeMajor: 26, nodeAbi: 147 })}\n`);
+
+    const result = await installManagedRelease(
+      { ...fixture.request, artifactDigest: 'b'.repeat(64), nodeAbi: 147 },
+      {
+        ...testDependencies(),
+        runtimeIdentity: {
+          platform: process.platform,
+          architecture: process.arch,
+          nodeMajor: 26,
+          nodeAbi: 147,
+        },
+      },
+    );
+
+    expect(result).toMatchObject({ status: 'updated', version: '1.2.3' });
+    expect(readlinkSync(path.join(fixture.prefix, 'lib/spool/current'))).toBe(
+      'versions/1.2.3-abi147',
+    );
+    expect(readManagedInstallOwnership(fixture.prefix)).toMatchObject({
+      nodeAbi: 147,
+      releaseDirectory: '1.2.3-abi147',
+    });
+  });
+
+  it('replaces the runtime for a legacy ownership record without a release directory', async () => {
+    const fixture = installFixture('1.2.3');
+    await installManagedRelease(fixture.request, testDependencies());
+    const managedRoot = path.join(fixture.prefix, 'lib/spool');
+    const ownershipPath = path.join(managedRoot, MANAGED_INSTALL_FILENAME);
+    const ownership = JSON.parse(readFileSync(ownershipPath, 'utf8')) as Record<string, unknown>;
+    delete ownership.releaseDirectory;
+    writeFileSync(ownershipPath, `${JSON.stringify(ownership, null, 2)}\n`);
+    renameSync(
+      path.join(managedRoot, 'versions/1.2.3-abi137'),
+      path.join(managedRoot, 'versions/1.2.3'),
+    );
+    rmSync(path.join(managedRoot, 'current'));
+    symlinkSync('versions/1.2.3', path.join(managedRoot, 'current'));
+
+    const runtimePath = path.join(fixture.candidate, 'release-runtime.json');
+    const runtime = JSON.parse(readFileSync(runtimePath, 'utf8')) as Record<string, unknown>;
+    writeFileSync(runtimePath, `${JSON.stringify({ ...runtime, nodeMajor: 26, nodeAbi: 147 })}\n`);
+    const result = await installManagedRelease(
+      { ...fixture.request, artifactDigest: 'b'.repeat(64), nodeAbi: 147 },
+      {
+        ...testDependencies(),
+        runtimeIdentity: {
+          platform: process.platform,
+          architecture: process.arch,
+          nodeMajor: 26,
+          nodeAbi: 147,
+        },
+      },
+    );
+
+    expect(result.status).toBe('updated');
+    expect(readlinkSync(path.join(managedRoot, 'current'))).toBe('versions/1.2.3-abi147');
   });
 
   it.each(['spool'])('refuses an occupied %s target with exit 2 and no changes', async (alias) => {
@@ -102,7 +193,9 @@ describe('managed release installation', () => {
     expect(result.message).toContain(
       `export PATH="${path.join(realpathSync(fixture.prefix), 'bin')}:$PATH"`,
     );
-    expect(readlinkSync(path.join(fixture.prefix, 'lib/spool/current'))).toBe('versions/1.2.3');
+    expect(readlinkSync(path.join(fixture.prefix, 'lib/spool/current'))).toBe(
+      'versions/1.2.3-abi137',
+    );
   });
 
   it('treats an intact reinstall as a no-op', async () => {
@@ -127,7 +220,7 @@ describe('managed release installation', () => {
     const fixture = installFixture('1.2.3');
     const dependencies = testDependencies();
     await installManagedRelease(fixture.request, dependencies);
-    rmSync(path.join(fixture.prefix, 'lib/spool/versions/1.2.3'), {
+    rmSync(path.join(fixture.prefix, 'lib/spool/versions/1.2.3-abi137'), {
       recursive: true,
       force: true,
     });
@@ -141,7 +234,7 @@ describe('managed release installation', () => {
     const fixture = installFixture('1.2.3');
     const dependencies = testDependencies();
     await installManagedRelease(fixture.request, dependencies);
-    chmodSync(path.join(fixture.prefix, 'lib/spool/versions/1.2.3/bin/spool'), 0o644);
+    chmodSync(path.join(fixture.prefix, 'lib/spool/versions/1.2.3-abi137/bin/spool'), 0o644);
 
     await expect(installManagedRelease(fixture.request, dependencies)).rejects.toMatchObject({
       code: 'damaged-install',
@@ -199,7 +292,7 @@ describe('managed release installation', () => {
     ).rejects.toThrow(/smoke failure/i);
     expect(existsSync(path.join(fixture.prefix, 'bin/spool'))).toBe(false);
     expect(existsSync(path.join(fixture.prefix, 'lib/spool/current'))).toBe(false);
-    expect(existsSync(path.join(fixture.prefix, 'lib/spool/versions/1.2.3'))).toBe(false);
+    expect(existsSync(path.join(fixture.prefix, 'lib/spool/versions/1.2.3-abi137'))).toBe(false);
   });
 
   it('rejects a candidate whose CLI reports the wrong version before staging', async () => {
@@ -244,12 +337,14 @@ describe('managed release installation', () => {
       }),
     ).rejects.toThrow(/post-activation failure/i);
 
-    expect(readlinkSync(path.join(first.prefix, 'lib/spool/current'))).toBe('versions/1.2.3');
+    expect(readlinkSync(path.join(first.prefix, 'lib/spool/current'))).toBe(
+      'versions/1.2.3-abi137',
+    );
     const ownership = JSON.parse(
       readFileSync(path.join(first.prefix, 'lib/spool', MANAGED_INSTALL_FILENAME), 'utf8'),
     ) as { version: string };
     expect(ownership.version).toBe('1.2.3');
-    expect(existsSync(path.join(first.prefix, 'lib/spool/versions/1.3.0'))).toBe(false);
+    expect(existsSync(path.join(first.prefix, 'lib/spool/versions/1.3.0-abi137'))).toBe(false);
   });
 
   it('continues rollback cleanup after one cleanup operation fails', async () => {
@@ -282,8 +377,8 @@ describe('managed release installation', () => {
     );
     await expect(installation).rejects.toMatchObject({ code: 'rolled-back' });
     await expect(installation).rejects.toThrow('fixture activation failure');
-    expect(readlinkSync(currentPath)).toBe('versions/1.2.3');
-    expect(existsSync(path.join(first.prefix, 'lib/spool/versions/1.3.0'))).toBe(false);
+    expect(readlinkSync(currentPath)).toBe('versions/1.2.3-abi137');
+    expect(existsSync(path.join(first.prefix, 'lib/spool/versions/1.3.0-abi137'))).toBe(false);
   });
 
   it('rejects downgrades and an active daemon before activation', async () => {

@@ -4,6 +4,15 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
+import {
+  isSupportedNodeRuntime,
+  isSupportedReleaseTuple,
+  releaseTargetKey,
+  SUPPORTED_NODE_RUNTIMES,
+  SUPPORTED_RELEASE_TUPLES,
+  SUPPORTED_RUNTIME_DESCRIPTION,
+} from './runtime-support.js';
+
 const RELEASE_MANIFEST_TIMEOUT_MS = 30_000;
 const RELEASE_ARTIFACT_TIMEOUT_MS = 300_000;
 const MAX_RELEASE_MANIFEST_BYTES = 1024 * 1024;
@@ -43,15 +52,10 @@ export async function acquireRelease(request: ReleaseAcquisitionRequest): Promis
     nodeAbi: Number(process.versions.modules),
   };
   if (
-    runtime.nodeMajor !== 24 ||
-    runtime.nodeAbi !== 137 ||
-    !['darwin-x64', 'darwin-arm64', 'linux-x64', 'linux-arm64'].includes(
-      `${runtime.platform}-${runtime.architecture}`,
-    )
+    !isSupportedNodeRuntime(runtime.nodeMajor, runtime.nodeAbi) ||
+    !isSupportedReleaseTuple(runtime.platform, runtime.architecture)
   ) {
-    throw new ReleaseUnavailableError(
-      'Managed updates require macOS or Linux with Node 24 ABI 137',
-    );
+    throw new ReleaseUnavailableError(`Managed updates require ${SUPPORTED_RUNTIME_DESCRIPTION}`);
   }
   const exactVersion = request.version;
   if (exactVersion && !/^\d+\.\d+\.\d+$/.test(exactVersion)) {
@@ -60,7 +64,7 @@ export async function acquireRelease(request: ReleaseAcquisitionRequest): Promis
   const releaseSource = exactVersion
     ? `${request.releaseBaseUrl}/download/v${exactVersion}`
     : `${request.releaseBaseUrl}/latest/download`;
-  const manifest = await fetchJson(`${releaseSource}/release-manifest.json`);
+  const manifest = await fetchJson(`${releaseSource}/release-manifest-v2.json`);
   const artifact = validateManifest(manifest, runtime, exactVersion);
   const temporaryRoot = mkdtempSync(path.join(tmpdir(), 'spool-update-'));
   try {
@@ -173,7 +177,7 @@ function validateManifest(
   runtime: { platform: string; architecture: string; nodeMajor: number; nodeAbi: number },
   exactVersion: string | undefined,
 ) {
-  if (!isRecord(value) || value.schemaVersion !== 1 || typeof value.version !== 'string') {
+  if (!isRecord(value) || value.schemaVersion !== 2 || typeof value.version !== 'string') {
     throw new ReleaseUnavailableError('Release manifest metadata is invalid');
   }
   if (
@@ -185,25 +189,39 @@ function validateManifest(
   if (exactVersion && value.version !== exactVersion) {
     throw new ReleaseUnavailableError(`Release manifest does not describe ${exactVersion}`);
   }
-  if (!Array.isArray(value.artifacts) || value.artifacts.length !== 4) {
+  if (
+    !Array.isArray(value.artifacts) ||
+    value.artifacts.length !== SUPPORTED_RELEASE_TUPLES.length * SUPPORTED_NODE_RUNTIMES.length
+  ) {
     throw new ReleaseUnavailableError('Release manifest matrix is incomplete');
   }
-  const declared = new Set(['darwin-x64', 'darwin-arm64', 'linux-x64', 'linux-arm64']);
   const seen = new Set<string>();
   let selected: ReturnType<typeof artifactDescriptor> | undefined;
   for (const candidate of value.artifacts) {
     const artifact = artifactDescriptor(candidate, value.version);
-    const tuple = `${artifact.platform}-${artifact.architecture}`;
-    if (!declared.has(tuple) || seen.has(tuple)) {
-      throw new ReleaseUnavailableError(`Invalid release tuple: ${tuple}`);
+    const target = releaseTargetKey(artifact);
+    if (!isSupportedReleaseTuple(artifact.platform, artifact.architecture) || seen.has(target)) {
+      throw new ReleaseUnavailableError(`Invalid release target: ${target}`);
     }
-    seen.add(tuple);
-    if (tuple === `${runtime.platform}-${runtime.architecture}`) selected = artifact;
+    seen.add(target);
+    if (
+      artifact.platform === runtime.platform &&
+      artifact.architecture === runtime.architecture &&
+      artifact.nodeMajor === runtime.nodeMajor &&
+      artifact.nodeAbi === runtime.nodeAbi
+    ) {
+      selected = artifact;
+    }
   }
-  if (seen.size !== declared.size || !selected) {
-    throw new ReleaseUnavailableError('Release manifest matrix is incomplete');
+  for (const supportedRuntime of SUPPORTED_NODE_RUNTIMES) {
+    for (const tuple of SUPPORTED_RELEASE_TUPLES) {
+      const [platform, architecture] = tuple.split('-') as [string, string];
+      if (!seen.has(releaseTargetKey({ ...supportedRuntime, platform, architecture }))) {
+        throw new ReleaseUnavailableError('Release manifest matrix is incomplete');
+      }
+    }
   }
-  if (selected.nodeMajor !== runtime.nodeMajor || selected.nodeAbi !== runtime.nodeAbi) {
+  if (!selected) {
     throw new ReleaseUnavailableError('Release does not support the running Node ABI');
   }
   return selected;
@@ -221,10 +239,12 @@ function artifactDescriptor(value: unknown, version: string) {
   if (
     typeof platform !== 'string' ||
     typeof architecture !== 'string' ||
-    nodeMajor !== 24 ||
-    nodeAbi !== 137 ||
+    typeof nodeMajor !== 'number' ||
+    typeof nodeAbi !== 'number' ||
+    !isSupportedNodeRuntime(nodeMajor, nodeAbi) ||
     typeof filename !== 'string' ||
-    filename !== `spool-v${version}-node24-abi137-${platform}-${architecture}.tar.gz` ||
+    filename !==
+      `spool-v${version}-node${String(nodeMajor)}-abi${String(nodeAbi)}-${platform}-${architecture}.tar.gz` ||
     typeof sha256 !== 'string' ||
     !/^[0-9a-f]{64}$/.test(sha256) ||
     !Number.isSafeInteger(size) ||

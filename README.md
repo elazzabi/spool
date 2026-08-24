@@ -10,7 +10,7 @@ If Markdown is already where you decide what to do, spool makes it where you del
 
 ## Quick start
 
-You need Node.js 24, Git, and at least one supported agent CLI installed and signed in. The first release channel supports Node 24 on macOS or Linux, on either `x64` or `arm64`.
+You need Node.js 24 or 26, Git, and at least one supported agent CLI installed and signed in. The release channel supports both Node versions on macOS or Linux, on either `x64` or `arm64`.
 
 Install the latest stable spool release from GitHub:
 
@@ -51,7 +51,7 @@ This guided command checks the agent CLI, asks you to review its access profile 
 
 ## Managed installation and updates
 
-The installer selects the release archive for the current operating system, architecture, Node 24 runtime, and ABI. It verifies the release manifest, archive size, and SHA-256 digest before it runs candidate code.
+The installer selects the release archive for the current operating system, architecture, Node 24 or Node 26 runtime, and ABI. It verifies the release manifest, archive size, and SHA-256 digest before it runs candidate code.
 
 Install an exact stable version instead of the latest one:
 
@@ -74,7 +74,7 @@ $HOME/.local/
 ├── bin/
 │   └── spool -> ../lib/spool/current/bin/spool
 └── lib/spool/
-    ├── current -> versions/0.1.0
+    ├── current -> versions/0.1.0-abi137
     ├── versions/
     │   └── 0.1.0/
     └── managed-install.json
@@ -415,7 +415,7 @@ npm run smoke:providers
 
 ## GitHub release process
 
-A matching `v<package-version>` tag drives `.github/workflows/release.yml`. The workflow builds all four Node 24 assets, assembles the manifest and checksums, creates a draft GitHub Release, downloads every asset into clean platform jobs, verifies provenance, and publishes the draft only after every smoke test passes.
+A matching `v<package-version>` tag drives `.github/workflows/release.yml`. The workflow builds all eight Node 24 and Node 26 assets, assembles the manifest and checksums, creates a draft GitHub Release, downloads every asset into clean platform jobs, verifies provenance, and publishes the draft only after every smoke test passes.
 
 Validate an existing matching tag without creating a release:
 

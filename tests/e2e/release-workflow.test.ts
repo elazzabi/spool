@@ -28,20 +28,26 @@ describe('GitHub Release workflow contract', () => {
     );
   });
 
-  it('builds the complete Node 24 platform matrix with version-pinned actions', () => {
+  it('builds the complete Node 24 and Node 26 platform matrix with version-pinned actions', () => {
     const source = readFileSync(releaseWorkflowPath, 'utf8');
     const workflow = YAML.parse(source) as {
       jobs: Record<string, { strategy?: { matrix?: { include?: unknown[] } } }>;
     };
-    const matrix = workflow.jobs.build?.strategy?.matrix?.include;
+    const expectedMatrix = [
+      { runner: 'ubuntu-24.04', platform: 'linux', architecture: 'x64', node: 24 },
+      { runner: 'ubuntu-24.04', platform: 'linux', architecture: 'x64', node: 26 },
+      { runner: 'ubuntu-24.04-arm', platform: 'linux', architecture: 'arm64', node: 24 },
+      { runner: 'ubuntu-24.04-arm', platform: 'linux', architecture: 'arm64', node: 26 },
+      { runner: 'macos-15-intel', platform: 'darwin', architecture: 'x64', node: 24 },
+      { runner: 'macos-15-intel', platform: 'darwin', architecture: 'x64', node: 26 },
+      { runner: 'macos-15', platform: 'darwin', architecture: 'arm64', node: 24 },
+      { runner: 'macos-15', platform: 'darwin', architecture: 'arm64', node: 26 },
+    ];
 
-    expect(matrix).toEqual([
-      { runner: 'ubuntu-24.04', platform: 'linux', architecture: 'x64' },
-      { runner: 'ubuntu-24.04-arm', platform: 'linux', architecture: 'arm64' },
-      { runner: 'macos-15-intel', platform: 'darwin', architecture: 'x64' },
-      { runner: 'macos-15', platform: 'darwin', architecture: 'arm64' },
-    ]);
-    expect(source).toContain('node-version: 24');
+    expect(workflow.jobs.build?.strategy?.matrix?.include).toEqual(expectedMatrix);
+    expect(workflow.jobs['smoke-release']?.strategy?.matrix?.include).toEqual(expectedMatrix);
+    expect(workflow.jobs['smoke-dry-run']?.strategy?.matrix?.include).toEqual(expectedMatrix);
+    expect(source).toContain('node-version: ${{ matrix.node }}');
     for (const [, reference] of source.matchAll(/^\s*uses:\s*(\S+)$/gm)) {
       expect(reference).toMatch(/@v\d+$/);
     }
@@ -64,6 +70,7 @@ describe('GitHub Release workflow contract', () => {
     expect(source).toContain('gh attestation verify');
     expect(source).toContain('--daemon-lock true');
     expect(source).toContain('release-manifest.json');
+    expect(source).toContain('release-manifest-v2.json');
     expect(source).toContain('SHA256SUMS');
 
     expect(workflow.jobs.publish?.needs).toEqual(['validate', 'smoke-release']);

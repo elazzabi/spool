@@ -1,6 +1,6 @@
 {
   "name": "spool",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "private": true,
   "description": "A Markdown-native control plane for local AI agents",
   "keywords": [
@@ -33,7 +33,7 @@
     "README.md"
   ],
   "engines": {
-    "node": ">=22.18.0"
+    "node": "^24.0.0 || ^26.0.0"
   },
   "packageManager": "npm@11.15.0",
   "scripts": {
@@ -52,7 +52,7 @@
     "release:artifact": "npm run build && node scripts/build-release.mjs artifact",
     "release:manifest": "node scripts/build-release.mjs manifest",
     "release:validate-tag": "node scripts/build-release.mjs validate-tag",
-    "release:verify": "node scripts/test-release.mjs --manifest release/release-manifest.json --daemon-lock true",
+    "release:verify": "node scripts/test-release.mjs --manifest release/release-manifest-v2.json --daemon-lock true",
     "doctor": "node dist/cli/index.js doctor",
     "smoke:providers": "npm run build && node scripts/smoke-providers.mjs",
     "check:source": "npm run format:check && npm run lint && npm run typecheck && npm test",

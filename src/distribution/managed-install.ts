@@ -26,9 +26,14 @@ import { fileURLToPath } from 'node:url';
 
 import { defaultConfigPath, resolveConfiguredPath } from '../config/paths.js';
 import { daemonOwnershipWindowIsActive } from '../ledger/daemon-lock.js';
+import {
+  isSupportedNodeRuntime,
+  isSupportedReleaseTuple,
+  SUPPORTED_NODE_RUNTIMES,
+  SUPPORTED_RUNTIME_DESCRIPTION,
+} from './runtime-support.js';
 
 export const MANAGED_INSTALL_FILENAME = 'managed-install.json';
-export const MANAGED_NODE_ABI = 137;
 
 export type ManagedInstallStatus = 'installed' | 'updated' | 'current' | 'attention';
 
@@ -39,6 +44,7 @@ export interface ManagedInstallOwnership {
   releaseSource: string;
   artifactDigest: string;
   nodeAbi: number;
+  releaseDirectory?: string;
   activePrefix: string;
 }
 
@@ -141,7 +147,7 @@ export async function installManagedRelease(
         `Refusing to downgrade managed spool from ${ownership.version} to ${normalized.version}`,
       );
     }
-    if (comparison === 0) {
+    if (comparison === 0 && ownership.nodeAbi === normalized.nodeAbi) {
       assertIntactManagedInstall(layout, ownership);
       return pathResult(normalized.prefix, normalized.version, 'current', dependencies.pathValue);
     }
@@ -239,7 +245,8 @@ async function activateCandidate(
   const remove = dependencies.remove ?? rmSync;
   const nonce = randomUUID();
   const stagingPath = path.join(layout.versionsDirectory, `.staging-${request.version}-${nonce}`);
-  const versionPath = path.join(layout.versionsDirectory, request.version);
+  const releaseDirectory = releaseDirectoryFor(request.version, request.nodeAbi);
+  const versionPath = path.join(layout.versionsDirectory, releaseDirectory);
   const currentTemporary = path.join(layout.managedRoot, `.current-${nonce}`);
   const ownershipTemporary = path.join(layout.managedRoot, `.ownership-${nonce}`);
   const aliasTemporaries = Object.fromEntries(
@@ -260,10 +267,17 @@ async function activateCandidate(
   const publishedAliases = new Set<string>();
   let publishedOwnership = false;
 
+  if (
+    pathExists(versionPath) &&
+    previousOwnership &&
+    releaseDirectoryForOwnership(previousOwnership) !== releaseDirectory
+  ) {
+    remove(versionPath, { recursive: true, force: true });
+  }
   if (pathExists(versionPath)) {
     throw new ManagedInstallError(
       'version-exists',
-      `Managed version directory already exists unexpectedly: ${versionPath}`,
+      `Managed release directory exists: ${versionPath}`,
     );
   }
 
@@ -278,7 +292,7 @@ async function activateCandidate(
     rename(stagingPath, versionPath);
     publishedVersion = true;
 
-    symlinkSync(`versions/${request.version}`, currentTemporary);
+    symlinkSync(`versions/${releaseDirectory}`, currentTemporary);
     for (const [alias, temporary] of Object.entries(aliasTemporaries)) {
       if (existingAliases.has(alias)) continue;
       symlinkSync(expectedAliasTarget(alias as 'spool'), temporary);
@@ -402,24 +416,20 @@ function validateInstallRequest(
   if (!/^[0-9a-f]{64}$/i.test(request.artifactDigest)) {
     throw new ManagedInstallError('invalid-digest', 'Artifact digest must be a SHA-256 value');
   }
-  if (request.nodeAbi !== MANAGED_NODE_ABI) {
+  if (!SUPPORTED_NODE_RUNTIMES.some((runtime) => runtime.nodeAbi === request.nodeAbi)) {
     throw new ManagedInstallError(
       'unsupported-node-abi',
-      `Managed releases require Node ABI ${String(MANAGED_NODE_ABI)}`,
+      `Managed releases require Node ABI ${SUPPORTED_NODE_RUNTIMES.map((runtime) => String(runtime.nodeAbi)).join(' or ')}`,
     );
   }
-  const supportedTuple = ['darwin-x64', 'darwin-arm64', 'linux-x64', 'linux-arm64'].includes(
-    `${runtimeIdentity.platform}-${runtimeIdentity.architecture}`,
-  );
   if (
-    !supportedTuple ||
-    runtimeIdentity.nodeMajor !== 24 ||
-    runtimeIdentity.nodeAbi !== MANAGED_NODE_ABI ||
+    !isSupportedReleaseTuple(runtimeIdentity.platform, runtimeIdentity.architecture) ||
+    !isSupportedNodeRuntime(runtimeIdentity.nodeMajor, runtimeIdentity.nodeAbi) ||
     runtimeIdentity.nodeAbi !== request.nodeAbi
   ) {
     throw new ManagedInstallError(
       'unsupported-runtime',
-      `Managed releases require macOS or Linux on x64/arm64 with Node 24 ABI ${String(MANAGED_NODE_ABI)}`,
+      `Managed releases require ${SUPPORTED_RUNTIME_DESCRIPTION}`,
     );
   }
   let packageManifest: Record<string, unknown>;
@@ -499,6 +509,7 @@ function ownershipFor(request: ManagedInstallRequest): ManagedInstallOwnership {
     releaseSource: request.releaseSource,
     artifactDigest: request.artifactDigest.toLowerCase(),
     nodeAbi: request.nodeAbi,
+    releaseDirectory: releaseDirectoryFor(request.version, request.nodeAbi),
     activePrefix: request.prefix,
   };
 }
@@ -570,10 +581,11 @@ function assertIntactManagedInstall(
   layout: ReturnType<typeof managedLayout>,
   ownership: ManagedInstallOwnership,
 ): void {
+  const releaseDirectory = releaseDirectoryForOwnership(ownership);
   try {
     if (
       !lstatSync(layout.currentPath).isSymbolicLink() ||
-      readlinkSync(layout.currentPath) !== `versions/${ownership.version}`
+      readlinkSync(layout.currentPath) !== `versions/${releaseDirectory}`
     ) {
       throw new Error('invalid pointer');
     }
@@ -583,7 +595,7 @@ function assertIntactManagedInstall(
       'Managed current pointer is missing or invalid',
     );
   }
-  const versionPath = path.join(layout.versionsDirectory, ownership.version);
+  const versionPath = path.join(layout.versionsDirectory, releaseDirectory);
   try {
     if (!lstatSync(versionPath).isDirectory()) throw new Error('not a directory');
   } catch {
@@ -614,6 +626,14 @@ function assertIntactManagedInstall(
       );
     }
   }
+}
+
+function releaseDirectoryFor(version: string, nodeAbi: number): string {
+  return `${version}-abi${String(nodeAbi)}`;
+}
+
+function releaseDirectoryForOwnership(ownership: ManagedInstallOwnership): string {
+  return ownership.releaseDirectory ?? ownership.version;
 }
 
 function expectedAliasTarget(alias: 'spool'): string {

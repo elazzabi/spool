@@ -23,10 +23,13 @@ import { gzipSync, gunzipSync } from 'node:zlib';
 
 import { inspectNpmPackage } from './test-package.mjs';
 
-export const RELEASE_NODE_MAJOR = 24;
-export const RELEASE_NODE_ABI = 137;
-export const RELEASE_MANIFEST_FILENAME = 'release-manifest.json';
+export const RELEASE_MANIFEST_FILENAME = 'release-manifest-v2.json';
+export const LEGACY_RELEASE_MANIFEST_FILENAME = 'release-manifest.json';
 export const RELEASE_CHECKSUMS_FILENAME = 'SHA256SUMS';
+export const DECLARED_RELEASE_RUNTIMES = Object.freeze([
+  Object.freeze({ nodeMajor: 24, nodeAbi: 137 }),
+  Object.freeze({ nodeMajor: 26, nodeAbi: 147 }),
+]);
 export const DECLARED_RELEASE_TUPLES = Object.freeze([
   Object.freeze({ platform: 'darwin', architecture: 'x64' }),
   Object.freeze({ platform: 'darwin', architecture: 'arm64' }),
@@ -47,8 +50,8 @@ export function createReleaseArchive({
   version,
   platform,
   architecture,
-  nodeMajor = RELEASE_NODE_MAJOR,
-  nodeAbi = RELEASE_NODE_ABI,
+  nodeMajor,
+  nodeAbi,
 }) {
   const filename = artifactFilename({ version, platform, architecture, nodeMajor, nodeAbi });
   const archivePath = path.join(outputDirectory, filename);
@@ -81,13 +84,23 @@ export function createReleaseManifest({ outputDirectory, version, sourceRevision
     throw new Error('Release manifest source revision must be a full Git commit hash');
   }
   const manifest = {
-    schemaVersion: 1,
+    schemaVersion: 2,
     version,
     sourceRevision,
     artifacts,
   };
   const manifestPath = path.join(outputDirectory, RELEASE_MANIFEST_FILENAME);
   writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
+  const legacyManifest = {
+    schemaVersion: 1,
+    version,
+    sourceRevision,
+    artifacts: artifacts.filter(({ nodeMajor, nodeAbi }) => nodeMajor === 24 && nodeAbi === 137),
+  };
+  writeFileSync(
+    path.join(outputDirectory, LEGACY_RELEASE_MANIFEST_FILENAME),
+    `${JSON.stringify(legacyManifest, null, 2)}\n`,
+  );
   writeFileSync(
     path.join(outputDirectory, RELEASE_CHECKSUMS_FILENAME),
     `${artifacts.map((artifact) => `${artifact.sha256}  ${artifact.filename}`).join('\n')}\n`,
@@ -208,14 +221,16 @@ export function buildRuntimeArtifact({ outputDirectory, platform, architecture }
     rmSync(path.join(runtimeRoot, 'node_modules', '.package-lock.json'), { force: true });
     writeLaunchers(runtimeRoot);
     const nativeModule = findNativeModule(runtimeRoot);
+    const nodeMajor = Number(process.versions.node.split('.')[0]);
+    const nodeAbi = Number(process.versions.modules);
     writeFileSync(
       path.join(runtimeRoot, 'release-runtime.json'),
       `${JSON.stringify(
         {
           platform,
           architecture,
-          nodeMajor: RELEASE_NODE_MAJOR,
-          nodeAbi: RELEASE_NODE_ABI,
+          nodeMajor,
+          nodeAbi,
           nativeModule,
         },
         null,
@@ -229,6 +244,8 @@ export function buildRuntimeArtifact({ outputDirectory, platform, architecture }
       version: packageManifest.version,
       platform,
       architecture,
+      nodeMajor,
+      nodeAbi,
     });
   } finally {
     rmSync(temporaryRoot, { recursive: true, force: true });
@@ -319,6 +336,19 @@ function assertSafeArchivePath(entryPath) {
 }
 
 function compareArtifacts(left, right) {
+  const runtimeIndex = (artifact) =>
+    DECLARED_RELEASE_RUNTIMES.findIndex(
+      (runtime) => runtime.nodeMajor === artifact.nodeMajor && runtime.nodeAbi === artifact.nodeAbi,
+    );
+  const leftRuntimeIndex = runtimeIndex(left);
+  const rightRuntimeIndex = runtimeIndex(right);
+  if (leftRuntimeIndex !== rightRuntimeIndex) {
+    return leftRuntimeIndex === -1
+      ? 1
+      : rightRuntimeIndex === -1
+        ? -1
+        : leftRuntimeIndex - rightRuntimeIndex;
+  }
   const tupleIndex = (artifact) =>
     DECLARED_RELEASE_TUPLES.findIndex(
       (tuple) =>
@@ -334,20 +364,17 @@ function compareArtifacts(left, right) {
 function validateReleaseDescriptors(artifacts, outputDirectory, version) {
   const seen = new Set();
   for (const artifact of artifacts) {
-    const tupleKey = `${artifact.platform}-${artifact.architecture}`;
-    if (seen.has(tupleKey)) throw new Error(`Duplicate release tuple: ${tupleKey}`);
-    seen.add(tupleKey);
-    if (
-      !DECLARED_RELEASE_TUPLES.some(
-        (tuple) =>
-          tuple.platform === artifact.platform && tuple.architecture === artifact.architecture,
-      )
-    ) {
-      throw new Error(`Release metadata contains undeclared tuple: ${tupleKey}`);
-    }
-    if (artifact.nodeMajor !== RELEASE_NODE_MAJOR || artifact.nodeAbi !== RELEASE_NODE_ABI) {
+    const targetKey = releaseTargetKey(artifact);
+    if (seen.has(targetKey)) throw new Error(`Duplicate release target: ${targetKey}`);
+    seen.add(targetKey);
+    if (!isDeclaredReleaseTuple(artifact.platform, artifact.architecture)) {
       throw new Error(
-        `Release metadata must declare Node ${RELEASE_NODE_MAJOR} ABI ${RELEASE_NODE_ABI}: ${artifact.filename}`,
+        `Release metadata contains undeclared tuple: ${artifact.platform}-${artifact.architecture}`,
+      );
+    }
+    if (!isDeclaredReleaseRuntime(artifact.nodeMajor, artifact.nodeAbi)) {
+      throw new Error(
+        `Release metadata declares an unsupported Node runtime: ${artifact.filename}`,
       );
     }
     const expectedFilename = artifactFilename({ version, ...artifact });
@@ -359,11 +386,30 @@ function validateReleaseDescriptors(artifacts, outputDirectory, version) {
       throw new Error(`Release metadata digest or size mismatch: ${artifact.filename}`);
     }
   }
-  for (const tuple of DECLARED_RELEASE_TUPLES) {
-    const tupleKey = `${tuple.platform}-${tuple.architecture}`;
-    if (!seen.has(tupleKey))
-      throw new Error(`Release manifest is missing declared tuple: ${tupleKey}`);
+  for (const runtime of DECLARED_RELEASE_RUNTIMES) {
+    for (const tuple of DECLARED_RELEASE_TUPLES) {
+      const targetKey = releaseTargetKey({ ...runtime, ...tuple });
+      if (!seen.has(targetKey)) {
+        throw new Error(`Release manifest is missing declared target: ${targetKey}`);
+      }
+    }
   }
+}
+
+export function releaseTargetKey({ nodeMajor, nodeAbi, platform, architecture }) {
+  return `node${nodeMajor}-abi${nodeAbi}-${platform}-${architecture}`;
+}
+
+export function isDeclaredReleaseRuntime(nodeMajor, nodeAbi) {
+  return DECLARED_RELEASE_RUNTIMES.some(
+    (runtime) => runtime.nodeMajor === nodeMajor && runtime.nodeAbi === nodeAbi,
+  );
+}
+
+export function isDeclaredReleaseTuple(platform, architecture) {
+  return DECLARED_RELEASE_TUPLES.some(
+    (tuple) => tuple.platform === platform && tuple.architecture === architecture,
+  );
 }
 
 export function sha256(contents) {
@@ -371,11 +417,7 @@ export function sha256(contents) {
 }
 
 function assertDeclaredTuple(platform, architecture) {
-  if (
-    !DECLARED_RELEASE_TUPLES.some(
-      (tuple) => tuple.platform === platform && tuple.architecture === architecture,
-    )
-  ) {
+  if (!isDeclaredReleaseTuple(platform, architecture)) {
     throw new Error(`Cannot build undeclared release tuple: ${platform}-${architecture}`);
   }
 }
@@ -388,9 +430,9 @@ function assertBuildRuntime(platform, architecture) {
   }
   const nodeMajor = Number(process.versions.node.split('.')[0]);
   const nodeAbi = Number(process.versions.modules);
-  if (nodeMajor !== RELEASE_NODE_MAJOR || nodeAbi !== RELEASE_NODE_ABI) {
+  if (!isDeclaredReleaseRuntime(nodeMajor, nodeAbi)) {
     throw new Error(
-      `Release artifacts require Node ${RELEASE_NODE_MAJOR} ABI ${RELEASE_NODE_ABI}; running Node ${process.versions.node} ABI ${process.versions.modules}`,
+      `Release artifacts require Node 24 ABI 137 or Node 26 ABI 147; running Node ${process.versions.node} ABI ${process.versions.modules}`,
     );
   }
 }
@@ -444,7 +486,7 @@ function writeRuntimePackage(runtimeRoot, manifest) {
     license: manifest.license,
     type: manifest.type,
     bin: manifest.bin,
-    engines: { node: '^24.0.0' },
+    engines: { node: '^24.0.0 || ^26.0.0' },
     dependencies: manifest.dependencies,
   };
   writeFileSync(
@@ -454,13 +496,17 @@ function writeRuntimePackage(runtimeRoot, manifest) {
 }
 
 function writeLaunchers(runtimeRoot) {
-  const launcher = `#!/bin/sh\nset -eu\nSCRIPT=$0\nwhile [ -L "$SCRIPT" ]; do\n  DIRECTORY=$(CDPATH= cd -P -- "$(dirname -- "$SCRIPT")" && pwd)\n  SCRIPT=$(readlink "$SCRIPT")\n  case $SCRIPT in /*) ;; *) SCRIPT=$DIRECTORY/$SCRIPT ;; esac\ndone\nROOT=$(CDPATH= cd -P -- "$(dirname -- "$SCRIPT")/.." && pwd)\nexec node "$ROOT/dist/cli/index.js" "$@"\n`;
+  const launcher = renderLauncher();
   mkdirSync(path.join(runtimeRoot, 'bin'));
   for (const alias of ['spool']) {
     const target = path.join(runtimeRoot, 'bin', alias);
     writeFileSync(target, launcher, { mode: 0o755 });
     chmodSync(target, 0o755);
   }
+}
+
+export function renderLauncher() {
+  return `#!/bin/sh\nset -eu\nSCRIPT=$0\nwhile [ -L "$SCRIPT" ]; do\n  DIRECTORY=$(CDPATH= cd -P -- "$(dirname -- "$SCRIPT")" && pwd)\n  SCRIPT=$(readlink "$SCRIPT")\n  case $SCRIPT in /*) ;; *) SCRIPT=$DIRECTORY/$SCRIPT ;; esac\ndone\nROOT=$(CDPATH= cd -P -- "$(dirname -- "$SCRIPT")/.." && pwd)\nNODE=$(command -v node) || { printf '%s\\n' 'spool requires Node 24 or Node 26' >&2; exit 1; }\n"$NODE" -e 'const fs=require("node:fs");const runtime=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));const major=Number(process.versions.node.split(".")[0]);const abi=Number(process.versions.modules);if(major!==runtime.nodeMajor||abi!==runtime.nodeAbi){console.error("This spool release was built for Node "+runtime.nodeMajor+" ABI "+runtime.nodeAbi+", but "+process.execPath+" is Node "+major+" ABI "+abi+". Reinstall spool for this runtime: curl -fsSL https://raw.githubusercontent.com/elazzabi/spool/main/install.sh | sh");process.exit(1)}' "$ROOT/release-runtime.json"\nexec "$NODE" "$ROOT/dist/cli/index.js" "$@"\n`;
 }
 
 function findNativeModule(runtimeRoot) {

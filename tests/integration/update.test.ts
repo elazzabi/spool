@@ -28,6 +28,7 @@ import { acquireRelease, ReleaseUnavailableError } from '../../src/distribution/
 
 interface ReleaseBuildModule {
   DECLARED_RELEASE_TUPLES: ReadonlyArray<{ platform: string; architecture: string }>;
+  DECLARED_RELEASE_RUNTIMES: ReadonlyArray<{ nodeMajor: number; nodeAbi: number }>;
   createReleaseArchive(input: Record<string, unknown>): unknown;
   createReleaseManifest(input: Record<string, unknown>): string;
 }
@@ -60,7 +61,9 @@ describe('managed update command', () => {
     );
 
     expect(result).toMatchObject({ status: 'updated', exitCode: 0, version: '1.1.0' });
-    expect(readlinkSync(path.join(fixture.prefix, 'lib/spool/current'))).toBe('versions/1.1.0');
+    expect(readlinkSync(path.join(fixture.prefix, 'lib/spool/current'))).toBe(
+      'versions/1.1.0-abi137',
+    );
     expect(fixture.userData()).toEqual(before);
   });
 
@@ -99,7 +102,48 @@ describe('managed update command', () => {
       },
     );
     expect(result).toMatchObject({ status: 'updated', version: '1.1.0' });
-    expect(readlinkSync(path.join(fixture.prefix, 'lib/spool/current'))).toBe('versions/1.1.0');
+    expect(readlinkSync(path.join(fixture.prefix, 'lib/spool/current'))).toBe(
+      'versions/1.1.0-abi137',
+    );
+  });
+
+  it('acquires the exact Node 26 release target', async () => {
+    const root = mkdtempSync(path.join(tmpdir(), 'spool-node26-acquisition-'));
+    const assets = createReleaseAssets(root, '1.1.0');
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((input: string | URL | Request) => {
+        const inputUrl = input instanceof Request ? input.url : input.toString();
+        const filename = new URL(inputUrl).pathname.split('/').pop()!;
+        try {
+          return Promise.resolve(
+            new Response(readFileSync(path.join(assets, filename)), { status: 200 }),
+          );
+        } catch {
+          return Promise.resolve(new Response('missing', { status: 404 }));
+        }
+      }),
+    );
+
+    const release = await acquireRelease({
+      releaseBaseUrl: 'https://example.test/releases',
+      runtimeIdentity: {
+        platform: process.platform,
+        architecture: process.arch,
+        nodeMajor: 26,
+        nodeAbi: 147,
+      },
+    });
+    try {
+      expect(
+        JSON.parse(
+          readFileSync(path.join(release.candidateDirectory, 'release-runtime.json'), 'utf8'),
+        ),
+      ).toMatchObject({ nodeMajor: 26, nodeAbi: 147 });
+      expect(release.nodeAbi).toBe(147);
+    } finally {
+      release.cleanup();
+    }
   });
 
   it('reports the installed exact version as current without acquisition', async () => {
@@ -133,7 +177,9 @@ describe('managed update command', () => {
       expect(result.message).toContain(`Expected an exact stable version: ${version}`);
       expect(result.message).toContain('spool 1.2.0 remains active');
       expect(acquire).not.toHaveBeenCalled();
-      expect(readlinkSync(path.join(fixture.prefix, 'lib/spool/current'))).toBe('versions/1.2.0');
+      expect(readlinkSync(path.join(fixture.prefix, 'lib/spool/current'))).toBe(
+        'versions/1.2.0-abi137',
+      );
     },
   );
 
@@ -152,7 +198,9 @@ describe('managed update command', () => {
       },
     );
     expect(unavailable.status).toBe('unavailable');
-    expect(readlinkSync(path.join(fixture.prefix, 'lib/spool/current'))).toBe('versions/1.0.0');
+    expect(readlinkSync(path.join(fixture.prefix, 'lib/spool/current'))).toBe(
+      'versions/1.0.0-abi137',
+    );
   });
 
   it('explains unmanaged and daemon-active refusal', async () => {
@@ -204,7 +252,9 @@ describe('managed update command', () => {
       },
     );
     expect(rolledBack.status).toBe('rolled-back');
-    expect(readlinkSync(path.join(fixture.prefix, 'lib/spool/current'))).toBe('versions/1.0.0');
+    expect(readlinkSync(path.join(fixture.prefix, 'lib/spool/current'))).toBe(
+      'versions/1.0.0-abi137',
+    );
   });
 
   it('reports an inconsistent install when restoring the current pointer fails', async () => {
@@ -284,7 +334,7 @@ describe('managed release response bounds', () => {
         'fetch',
         vi.fn((input: string | URL | Request, init?: RequestInit) => {
           const inputUrl = input instanceof Request ? input.url : String(input);
-          const isManifest = inputUrl.endsWith('/release-manifest.json');
+          const isManifest = inputUrl.endsWith('/release-manifest-v2.json');
           if ((stalledResponse === 'manifest') === isManifest) {
             return new Promise<Response>((_resolve, reject) => {
               init?.signal?.addEventListener(
@@ -311,7 +361,7 @@ describe('managed release response bounds', () => {
       'fetch',
       vi.fn((input: string | URL | Request) => {
         const inputUrl = input instanceof Request ? input.url : String(input);
-        if (inputUrl.endsWith('/release-manifest.json')) {
+        if (inputUrl.endsWith('/release-manifest-v2.json')) {
           return Promise.resolve(new Response(JSON.stringify(releaseManifest(4))));
         }
         return Promise.resolve({
@@ -335,7 +385,7 @@ describe('managed release response bounds', () => {
       'fetch',
       vi.fn((input: string | URL | Request) => {
         const inputUrl = input instanceof Request ? input.url : String(input);
-        if (inputUrl.endsWith('/release-manifest.json')) {
+        if (inputUrl.endsWith('/release-manifest-v2.json')) {
           return Promise.resolve(new Response(JSON.stringify(releaseManifest(4))));
         }
         return Promise.resolve(
@@ -432,18 +482,20 @@ function releaseAcquisitionRequest() {
 function releaseManifest(artifactSize: number) {
   const version = '1.1.0';
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     version,
     sourceRevision: '0123456789abcdef0123456789abcdef01234567',
-    artifacts: releaseBuild.DECLARED_RELEASE_TUPLES.map(({ platform, architecture }) => ({
-      platform,
-      architecture,
-      nodeMajor: 24,
-      nodeAbi: 137,
-      filename: `spool-v${version}-node24-abi137-${platform}-${architecture}.tar.gz`,
-      sha256: 'a'.repeat(64),
-      size: artifactSize,
-    })),
+    artifacts: releaseBuild.DECLARED_RELEASE_RUNTIMES.flatMap(({ nodeMajor, nodeAbi }) =>
+      releaseBuild.DECLARED_RELEASE_TUPLES.map(({ platform, architecture }) => ({
+        platform,
+        architecture,
+        nodeMajor,
+        nodeAbi,
+        filename: `spool-v${version}-node${String(nodeMajor)}-abi${String(nodeAbi)}-${platform}-${architecture}.tar.gz`,
+        sha256: 'a'.repeat(64),
+        size: artifactSize,
+      })),
+    ),
   };
 }
 
@@ -454,8 +506,12 @@ function createCandidate(
     platform: process.platform,
     architecture: process.arch,
   },
+  runtime: { nodeMajor: number; nodeAbi: number } = { nodeMajor: 24, nodeAbi: 137 },
 ) {
-  const candidate = path.join(root, `candidate-${version}-${tuple.platform}-${tuple.architecture}`);
+  const candidate = path.join(
+    root,
+    `candidate-${version}-node${String(runtime.nodeMajor)}-${tuple.platform}-${tuple.architecture}`,
+  );
   mkdirSync(path.join(candidate, 'bin'), { recursive: true });
   mkdirSync(path.join(candidate, 'dist/cli'), { recursive: true });
   writeFileSync(
@@ -464,7 +520,7 @@ function createCandidate(
   );
   writeFileSync(
     path.join(candidate, 'release-runtime.json'),
-    `${JSON.stringify({ ...tuple, nodeMajor: 24, nodeAbi: 137 })}\n`,
+    `${JSON.stringify({ ...tuple, ...runtime })}\n`,
   );
   const cli = path.join(candidate, 'dist/cli/index.js');
   writeFileSync(cli, '#!/usr/bin/env node\n');
@@ -480,15 +536,16 @@ function createCandidate(
 function createReleaseAssets(root: string, releaseVersion: string) {
   const outputDirectory = path.join(root, `assets-${releaseVersion}`);
   mkdirSync(outputDirectory);
-  for (const tuple of releaseBuild.DECLARED_RELEASE_TUPLES) {
-    releaseBuild.createReleaseArchive({
-      runtimeRoot: createCandidate(root, releaseVersion, tuple),
-      outputDirectory,
-      version: releaseVersion,
-      ...tuple,
-      nodeMajor: 24,
-      nodeAbi: 137,
-    });
+  for (const runtime of releaseBuild.DECLARED_RELEASE_RUNTIMES) {
+    for (const tuple of releaseBuild.DECLARED_RELEASE_TUPLES) {
+      releaseBuild.createReleaseArchive({
+        runtimeRoot: createCandidate(root, releaseVersion, tuple, runtime),
+        outputDirectory,
+        version: releaseVersion,
+        ...tuple,
+        ...runtime,
+      });
+    }
   }
   releaseBuild.createReleaseManifest({
     outputDirectory,

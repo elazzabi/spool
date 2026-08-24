@@ -14,10 +14,10 @@ const manifest = JSON.parse(readFileSync(path.join(repositoryRoot, 'package.json
 };
 
 describe('end-user distribution documentation', () => {
-  it('leads from Node 24 and the one-line GitHub installer directly to setup', () => {
+  it('leads from Node 24 or Node 26 and the one-line GitHub installer directly to setup', () => {
     const quickStart = section('Quick start');
 
-    expect(quickStart).toContain('Node.js 24');
+    expect(quickStart).toContain('Node.js 24 or 26');
     expect(quickStart).toContain(
       'curl -fsSL https://raw.githubusercontent.com/elazzabi/spool/main/install.sh | sh',
     );

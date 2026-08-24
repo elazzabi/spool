@@ -1,3 +1,4 @@
+import { spawnSync } from 'node:child_process';
 import { chmodSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -7,6 +8,11 @@ import { describe, expect, it } from 'vitest';
 interface ReleaseTuple {
   readonly platform: string;
   readonly architecture: string;
+}
+
+interface ReleaseRuntime {
+  readonly nodeMajor: number;
+  readonly nodeAbi: number;
 }
 
 interface ArtifactDescriptor extends ReleaseTuple {
@@ -19,7 +25,7 @@ interface ArtifactDescriptor extends ReleaseTuple {
 
 interface BuildReleaseModule {
   readonly DECLARED_RELEASE_TUPLES: readonly ReleaseTuple[];
-  readonly RELEASE_NODE_ABI: number;
+  readonly DECLARED_RELEASE_RUNTIMES: readonly ReleaseRuntime[];
   readonly artifactFilename: (input: {
     readonly version: string;
     readonly platform: string;
@@ -41,10 +47,12 @@ interface BuildReleaseModule {
     readonly version: string;
     readonly sourceRevision: string;
   }) => string;
+  readonly renderLauncher: () => string;
 }
 
 interface TestReleaseModule {
   readonly smokeTestReleaseArtifact: (archivePath: string, runtimePath?: string) => unknown;
+  readonly verifyLegacyReleaseManifest: (manifestPath: string) => unknown;
   readonly verifyReleaseManifest: (manifestPath: string) => unknown;
 }
 
@@ -57,23 +65,25 @@ const testReleaseModule = (await import(
   '../../scripts/test-release.mjs'
 )) as TestReleaseModule;
 const {
+  DECLARED_RELEASE_RUNTIMES,
   DECLARED_RELEASE_TUPLES,
-  RELEASE_NODE_ABI,
   artifactFilename,
   createReleaseArchive,
   createReleaseManifest,
+  renderLauncher,
 } = buildReleaseModule;
-const { smokeTestReleaseArtifact, verifyReleaseManifest } = testReleaseModule;
+const { smokeTestReleaseArtifact, verifyLegacyReleaseManifest, verifyReleaseManifest } =
+  testReleaseModule;
 
 const version = '1.2.3';
 const sourceRevision = '0123456789abcdef0123456789abcdef01234567';
 
 describe('GitHub release artifact contract', () => {
-  it('builds the complete deterministic macOS and Linux matrix', () => {
+  it('builds the complete deterministic Node 24 and Node 26 platform matrix', () => {
     const first = createFixtureRelease();
     const second = createFixtureRelease();
 
-    expect(first.manifest.artifacts).toHaveLength(4);
+    expect(first.manifest.artifacts).toHaveLength(8);
     expect(
       first.manifest.artifacts.map(({ platform, architecture, nodeAbi }) => ({
         platform,
@@ -81,16 +91,21 @@ describe('GitHub release artifact contract', () => {
         nodeAbi,
       })),
     ).toEqual(
-      DECLARED_RELEASE_TUPLES.map(({ platform, architecture }) => ({
-        platform,
-        architecture,
-        nodeAbi: RELEASE_NODE_ABI,
-      })),
+      DECLARED_RELEASE_RUNTIMES.flatMap(({ nodeAbi }) =>
+        DECLARED_RELEASE_TUPLES.map(({ platform, architecture }) => ({
+          platform,
+          architecture,
+          nodeAbi,
+        })),
+      ),
     );
     expect(first.manifest.artifacts.map((artifact) => artifact.sha256)).toEqual(
       second.manifest.artifacts.map((artifact) => artifact.sha256),
     );
     expect(() => verifyReleaseManifest(first.manifestPath)).not.toThrow();
+    expect(() => verifyLegacyReleaseManifest(first.legacyManifestPath)).not.toThrow();
+    expect(first.legacyManifest.artifacts).toHaveLength(4);
+    expect(first.legacyManifest.artifacts.every(({ nodeMajor }) => nodeMajor === 24)).toBe(true);
   });
 
   it.each([
@@ -139,8 +154,7 @@ describe('GitHub release artifact contract', () => {
             {
               platform: 'darwin',
               architecture: 'x64',
-              nodeMajor: 24,
-              nodeAbi: RELEASE_NODE_ABI,
+              ...DECLARED_RELEASE_RUNTIMES[0]!,
               nativeModule: 'node_modules/better-sqlite3/build/Release/missing.node',
             },
             null,
@@ -168,21 +182,20 @@ describe('GitHub release artifact contract', () => {
   it('refuses to create an incomplete manifest', () => {
     const outputDirectory = mkdtempSync(path.join(tmpdir(), 'spool-release-incomplete-'));
     const tuple = DECLARED_RELEASE_TUPLES[0]!;
+    const runtime = DECLARED_RELEASE_RUNTIMES[0]!;
     createReleaseArchive({
       runtimeRoot: createRuntimeRoot({
         ...tuple,
-        nodeMajor: 24,
-        nodeAbi: RELEASE_NODE_ABI,
+        ...runtime,
       }),
       outputDirectory,
       version,
       ...tuple,
-      nodeMajor: 24,
-      nodeAbi: RELEASE_NODE_ABI,
+      ...runtime,
     });
 
     expect(() => createReleaseManifest({ outputDirectory, version, sourceRevision })).toThrow(
-      /missing declared tuple/i,
+      /missing declared target/i,
     );
   });
 
@@ -208,6 +221,33 @@ describe('GitHub release artifact contract', () => {
       smokeTestReleaseArtifact(path.join(outputDirectory, artifact.filename)),
     ).not.toThrow();
   });
+
+  it('rejects a launcher runtime change before loading the CLI', () => {
+    const currentMajor = Number(process.versions.node.split('.')[0]);
+    const mismatchedRuntime = DECLARED_RELEASE_RUNTIMES.find(
+      (runtime) => runtime.nodeMajor !== currentMajor,
+    )!;
+    const root = createRuntimeRoot({
+      platform: process.platform,
+      architecture: process.arch,
+      ...mismatchedRuntime,
+    });
+    const launcher = path.join(root, 'bin/spool');
+    writeFileSync(launcher, renderLauncher());
+    chmodSync(launcher, 0o755);
+
+    const result = spawnSync(launcher, ['--version'], {
+      encoding: 'utf8',
+      env: {
+        ...process.env,
+        PATH: `${path.dirname(process.execPath)}${path.delimiter}${process.env.PATH ?? ''}`,
+      },
+    });
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(`built for Node ${String(mismatchedRuntime.nodeMajor)}`);
+    expect(result.stderr).toContain('Reinstall spool');
+  });
 });
 
 function createFixtureRelease(
@@ -216,25 +256,27 @@ function createFixtureRelease(
   } = {},
 ) {
   const outputDirectory = mkdtempSync(path.join(tmpdir(), 'spool-release-contract-'));
-  for (const tuple of DECLARED_RELEASE_TUPLES) {
-    const runtimeRoot = createRuntimeRoot({
-      ...tuple,
-      nodeMajor: 24,
-      nodeAbi: RELEASE_NODE_ABI,
-    });
-    options.mutate?.(runtimeRoot);
-    createReleaseArchive({
-      runtimeRoot,
-      outputDirectory,
-      version,
-      ...tuple,
-      nodeMajor: 24,
-      nodeAbi: RELEASE_NODE_ABI,
-    });
+  for (const runtime of DECLARED_RELEASE_RUNTIMES) {
+    for (const tuple of DECLARED_RELEASE_TUPLES) {
+      const runtimeRoot = createRuntimeRoot({ ...tuple, ...runtime });
+      options.mutate?.(runtimeRoot);
+      createReleaseArchive({
+        runtimeRoot,
+        outputDirectory,
+        version,
+        ...tuple,
+        ...runtime,
+      });
+    }
   }
   const manifestPath = createReleaseManifest({ outputDirectory, version, sourceRevision });
+  const legacyManifestPath = path.join(outputDirectory, 'release-manifest.json');
   return {
     manifestPath,
+    legacyManifestPath,
+    legacyManifest: JSON.parse(readFileSync(legacyManifestPath, 'utf8')) as {
+      artifacts: Array<{ nodeMajor: number }>;
+    },
     manifest: JSON.parse(readFileSync(manifestPath, 'utf8')) as {
       artifacts: Array<{
         platform: string;

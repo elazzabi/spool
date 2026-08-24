@@ -65,7 +65,7 @@ else
 fi
 
 [ -n "$PREFIX" ] || fail "installation prefix cannot be empty"
-command -v node >/dev/null 2>&1 || fail "Node 24 is required; install it and retry"
+command -v node >/dev/null 2>&1 || fail "Node 24 or Node 26 is required; install one and retry"
 command -v curl >/dev/null 2>&1 || fail "curl is required"
 command -v tar >/dev/null 2>&1 || fail "tar is required"
 
@@ -74,8 +74,10 @@ NODE_ABI=$(node -p "process.versions.modules") || fail "could not inspect Node A
 PLATFORM=$(node -p "process.platform") || fail "could not inspect operating system"
 ARCHITECTURE=$(node -p "process.arch") || fail "could not inspect architecture"
 
-[ "$NODE_MAJOR" = 24 ] || fail "unsupported Node major $NODE_MAJOR; spool requires Node 24"
-[ "$NODE_ABI" = 137 ] || fail "unsupported Node ABI $NODE_ABI; spool requires ABI 137"
+case "$NODE_MAJOR-$NODE_ABI" in
+  24-137|26-147) ;;
+  *) fail "unsupported Node runtime $NODE_MAJOR ABI $NODE_ABI; spool requires Node 24 ABI 137 or Node 26 ABI 147" ;;
+esac
 case "$PLATFORM-$ARCHITECTURE" in
   darwin-x64|darwin-arm64|linux-x64|linux-arm64) ;;
   *) fail "unsupported runtime tuple: $PLATFORM-$ARCHITECTURE" ;;
@@ -89,20 +91,20 @@ cleanup() {
 trap cleanup 0
 trap 'cleanup; exit 1' HUP INT TERM
 
-MANIFEST_PATH=$TEMPORARY_ROOT/release-manifest.json
+MANIFEST_PATH=$TEMPORARY_ROOT/release-manifest-v2.json
 if ! curl -fL --retry 2 --connect-timeout 10 --max-time 300 \
   --speed-limit 1024 --speed-time 30 -o "$MANIFEST_PATH" \
-  "$ASSET_BASE/release-manifest.json"; then
+  "$ASSET_BASE/release-manifest-v2.json"; then
   fail "could not download release manifest from $ASSET_BASE"
 fi
 
 SELECTION=$(node -e '
 const fs = require("node:fs");
-const [manifestPath, platform, architecture, abi, requested] = process.argv.slice(1);
+const [manifestPath, platform, architecture, major, abi, requested] = process.argv.slice(1);
 let manifest;
 try { manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8")); }
 catch { throw new Error("release manifest is not valid JSON"); }
-if (manifest.schemaVersion !== 1 || !/^\d+\.\d+\.\d+$/.test(manifest.version)) {
+if (manifest.schemaVersion !== 2 || !/^\d+\.\d+\.\d+$/.test(manifest.version)) {
   throw new Error("release manifest metadata is invalid");
 }
 if (!/^[0-9a-f]{40}$/.test(manifest.sourceRevision)) {
@@ -111,37 +113,42 @@ if (!/^[0-9a-f]{40}$/.test(manifest.sourceRevision)) {
 if (requested && manifest.version !== requested) {
   throw new Error(`requested ${requested}, but manifest describes ${manifest.version}`);
 }
-if (!Array.isArray(manifest.artifacts) || manifest.artifacts.length !== 4) {
-  throw new Error("release manifest must contain the complete four-tuple matrix");
+if (!Array.isArray(manifest.artifacts) || manifest.artifacts.length !== 8) {
+  throw new Error("release manifest must contain the complete eight-target matrix");
 }
 const declared = new Set(["darwin-x64", "darwin-arm64", "linux-x64", "linux-arm64"]);
+const runtimes = new Set(["24-137", "26-147"]);
 const seen = new Set();
 for (const artifact of manifest.artifacts) {
   if (!artifact || typeof artifact !== "object") throw new Error("invalid artifact descriptor");
   const tuple = `${artifact.platform}-${artifact.architecture}`;
   if (!declared.has(tuple)) throw new Error(`undeclared release tuple: ${tuple}`);
-  if (seen.has(tuple)) throw new Error(`duplicate release tuple: ${tuple}`);
-  seen.add(tuple);
-  if (artifact.nodeMajor !== 24 || artifact.nodeAbi !== 137) {
-    throw new Error(`invalid Node contract for ${tuple}`);
-  }
-  const expected = `spool-v${manifest.version}-node24-abi137-${tuple}.tar.gz`;
+  const runtime = `${artifact.nodeMajor}-${artifact.nodeAbi}`;
+  if (!runtimes.has(runtime)) throw new Error(`invalid Node contract for ${tuple}`);
+  const target = `${runtime}-${tuple}`;
+  if (seen.has(target)) throw new Error(`duplicate release target: ${target}`);
+  seen.add(target);
+  const expected = `spool-v${manifest.version}-node${artifact.nodeMajor}-abi${artifact.nodeAbi}-${tuple}.tar.gz`;
   if (artifact.filename !== expected || !/^[A-Za-z0-9._-]+$/.test(artifact.filename)) {
-    throw new Error(`invalid artifact filename for ${tuple}`);
+    throw new Error(`invalid artifact filename for ${target}`);
   }
   if (!/^[0-9a-f]{64}$/.test(artifact.sha256) ||
       !Number.isSafeInteger(artifact.size) || artifact.size <= 0) {
     throw new Error(`invalid digest or size for ${tuple}`);
   }
 }
-if (seen.size !== declared.size) throw new Error("release manifest matrix is incomplete");
+for (const runtime of runtimes) {
+  for (const tuple of declared) {
+    if (!seen.has(`${runtime}-${tuple}`)) throw new Error("release manifest matrix is incomplete");
+  }
+}
 const matches = manifest.artifacts.filter((item) =>
   item.platform === platform && item.architecture === architecture &&
-  item.nodeMajor === 24 && item.nodeAbi === Number(abi));
+  item.nodeMajor === Number(major) && item.nodeAbi === Number(abi));
 if (matches.length !== 1) throw new Error("release manifest does not declare exactly one matching artifact");
 const artifact = matches[0];
 process.stdout.write(`${artifact.filename} ${artifact.sha256} ${manifest.version} ${artifact.size}`);
-' "$MANIFEST_PATH" "$PLATFORM" "$ARCHITECTURE" "$NODE_ABI" "$VERSION") ||
+' "$MANIFEST_PATH" "$PLATFORM" "$ARCHITECTURE" "$NODE_MAJOR" "$NODE_ABI" "$VERSION") ||
   fail "release manifest is malformed or does not support this runtime"
 
 set -- $SELECTION

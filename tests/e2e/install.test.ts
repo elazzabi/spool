@@ -22,6 +22,11 @@ interface ReleaseTuple {
   readonly architecture: string;
 }
 
+interface ReleaseRuntime {
+  readonly nodeMajor: number;
+  readonly nodeAbi: number;
+}
+
 interface ArtifactDescriptor extends ReleaseTuple {
   readonly filename: string;
   readonly nodeMajor: number;
@@ -32,7 +37,7 @@ interface ArtifactDescriptor extends ReleaseTuple {
 
 interface BuildReleaseModule {
   readonly DECLARED_RELEASE_TUPLES: readonly ReleaseTuple[];
-  readonly RELEASE_NODE_ABI: number;
+  readonly DECLARED_RELEASE_RUNTIMES: readonly ReleaseRuntime[];
   readonly createReleaseArchive: (input: {
     runtimeRoot: string;
     outputDirectory: string;
@@ -53,8 +58,14 @@ const releaseModule = (await import(
   // @ts-expect-error The release build executable is intentionally plain JavaScript.
   '../../scripts/build-release.mjs'
 )) as BuildReleaseModule;
-const { DECLARED_RELEASE_TUPLES, RELEASE_NODE_ABI, createReleaseArchive, createReleaseManifest } =
-  releaseModule;
+const {
+  DECLARED_RELEASE_RUNTIMES,
+  DECLARED_RELEASE_TUPLES,
+  createReleaseArchive,
+  createReleaseManifest,
+} = releaseModule;
+const node24Runtime = DECLARED_RELEASE_RUNTIMES[0]!;
+const node26Runtime = DECLARED_RELEASE_RUNTIMES[1]!;
 const installerPath = fileURLToPath(new URL('../../install.sh', import.meta.url));
 const installerSource = readFileSync(installerPath, 'utf8');
 const version = '1.2.3';
@@ -76,8 +87,31 @@ describe('POSIX release installer', () => {
     expect(invocation).toContain('--version');
     expect(invocation).toContain(version);
     expect(invocation).toContain('--artifact-digest');
-    expect(invocation).toContain(RELEASE_NODE_ABI.toString());
+    expect(invocation).toContain(node24Runtime.nodeAbi.toString());
     expect(invocation.slice(-2)).toEqual(['--config', configPath]);
+  });
+
+  it('selects and installs the Node 26 ABI 147 release target', () => {
+    const fixture = bootstrapFixture();
+    const result = runBootstrap(fixture, [], {
+      nodeMajor: node26Runtime.nodeMajor.toString(),
+      nodeAbi: node26Runtime.nodeAbi.toString(),
+    });
+
+    expect(result.status).toBe(0);
+    const invocation = JSON.parse(readFileSync(fixture.recordPath, 'utf8')) as string[];
+    expect(invocation).toContain(node26Runtime.nodeAbi.toString());
+    const manifest = JSON.parse(
+      readFileSync(path.join(fixture.downloadDirectories[0]!, 'release-manifest-v2.json'), 'utf8'),
+    ) as ReleaseManifestFixture;
+    const expected = manifest.artifacts.find(
+      (artifact) =>
+        artifact.platform === process.platform &&
+        artifact.architecture === process.arch &&
+        artifact.nodeMajor === node26Runtime.nodeMajor &&
+        artifact.nodeAbi === node26Runtime.nodeAbi,
+    )!;
+    expect(invocation[invocation.indexOf('--artifact-digest') + 1]).toBe(expected.sha256);
   });
 
   it('bounds manifest and artifact download duration', () => {
@@ -126,7 +160,7 @@ describe('POSIX release installer', () => {
     const result = runBootstrap(fixture, [], { nodeAbi: '999' });
 
     expect(result.status).toBe(1);
-    expect(result.stderr).toContain('unsupported Node ABI 999');
+    expect(result.stderr).toContain('unsupported Node runtime 24 ABI 999');
     expect(existsSync(fixture.recordPath)).toBe(false);
     expect(existsSync(fixture.prefix)).toBe(false);
   });
@@ -134,7 +168,7 @@ describe('POSIX release installer', () => {
   it('rejects a malformed manifest before downloading an artifact', () => {
     const fixture = bootstrapFixture();
     for (const directory of fixture.downloadDirectories) {
-      writeFileSync(path.join(directory, 'release-manifest.json'), '{ malformed');
+      writeFileSync(path.join(directory, 'release-manifest-v2.json'), '{ malformed');
     }
 
     const result = runBootstrap(fixture);
@@ -184,7 +218,7 @@ describe('POSIX release installer', () => {
   ])('rejects a manifest with %s before downloading an artifact', (_label, mutate) => {
     const fixture = bootstrapFixture();
     for (const directory of fixture.downloadDirectories) {
-      const manifestPath = path.join(directory, 'release-manifest.json');
+      const manifestPath = path.join(directory, 'release-manifest-v2.json');
       const manifest = JSON.parse(readFileSync(manifestPath, 'utf8')) as ReleaseManifestFixture;
       mutate(manifest);
       writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
@@ -201,13 +235,16 @@ describe('POSIX release installer', () => {
     const fixture = bootstrapFixture();
     const latest = fixture.downloadDirectories[0]!;
     const manifest = JSON.parse(
-      readFileSync(path.join(latest, 'release-manifest.json'), 'utf8'),
+      readFileSync(path.join(latest, 'release-manifest-v2.json'), 'utf8'),
     ) as {
       artifacts: ArtifactDescriptor[];
     };
     const selected = manifest.artifacts.find(
       (artifact) =>
-        artifact.platform === process.platform && artifact.architecture === process.arch,
+        artifact.platform === process.platform &&
+        artifact.architecture === process.arch &&
+        artifact.nodeMajor === node24Runtime.nodeMajor &&
+        artifact.nodeAbi === node24Runtime.nodeAbi,
     )!;
     const artifactPath = path.join(latest, selected.filename);
     const tampered = readFileSync(artifactPath);
@@ -225,13 +262,16 @@ describe('POSIX release installer', () => {
     const fixture = bootstrapFixture();
     const latest = fixture.downloadDirectories[0]!;
     const manifest = JSON.parse(
-      readFileSync(path.join(latest, 'release-manifest.json'), 'utf8'),
+      readFileSync(path.join(latest, 'release-manifest-v2.json'), 'utf8'),
     ) as {
       artifacts: ArtifactDescriptor[];
     };
     const selected = manifest.artifacts.find(
       (artifact) =>
-        artifact.platform === process.platform && artifact.architecture === process.arch,
+        artifact.platform === process.platform &&
+        artifact.architecture === process.arch &&
+        artifact.nodeMajor === node24Runtime.nodeMajor &&
+        artifact.nodeAbi === node24Runtime.nodeAbi,
     )!;
     const artifactPath = path.join(latest, selected.filename);
     const artifact = readFileSync(artifactPath);
@@ -260,6 +300,7 @@ describe('POSIX release installer', () => {
     const candidate = createCandidate(root, {
       platform: process.platform,
       architecture: process.arch,
+      ...node24Runtime,
       realInstaller: false,
     });
     const prefix = path.join(root, 'prefix');
@@ -272,7 +313,7 @@ describe('POSIX release installer', () => {
         channel: 'stable',
         releaseSource: 'https://example.test/releases/latest/download',
         artifactDigest: 'c'.repeat(64),
-        nodeAbi: RELEASE_NODE_ABI,
+        nodeAbi: node24Runtime.nodeAbi,
       },
       {
         withDaemonLock: (_configPath, operation) => Promise.resolve(operation()),
@@ -280,14 +321,15 @@ describe('POSIX release installer', () => {
         runtimeIdentity: {
           platform: process.platform,
           architecture: process.arch,
-          nodeMajor: 24,
-          nodeAbi: RELEASE_NODE_ABI,
+          ...node24Runtime,
         },
       },
     );
 
     expect(result).toMatchObject({ status: 'installed', exitCode: 0 });
-    expect(readlinkSync(path.join(prefix, 'lib/spool/current'))).toBe(`versions/${version}`);
+    expect(readlinkSync(path.join(prefix, 'lib/spool/current'))).toBe(
+      `versions/${version}-abi${String(node24Runtime.nodeAbi)}`,
+    );
     for (const alias of ['spool']) {
       const executed = spawnSync(path.join(prefix, 'bin', alias), ['--version'], {
         cwd: root,
@@ -306,15 +348,16 @@ function bootstrapFixture() {
   const releases = path.join(root, 'releases');
   const assets = path.join(root, 'assets');
   mkdirSync(assets);
-  for (const tuple of DECLARED_RELEASE_TUPLES) {
-    createReleaseArchive({
-      runtimeRoot: createCandidate(root, { ...tuple, realInstaller: true }),
-      outputDirectory: assets,
-      version,
-      ...tuple,
-      nodeMajor: 24,
-      nodeAbi: RELEASE_NODE_ABI,
-    });
+  for (const runtime of DECLARED_RELEASE_RUNTIMES) {
+    for (const tuple of DECLARED_RELEASE_TUPLES) {
+      createReleaseArchive({
+        runtimeRoot: createCandidate(root, { ...tuple, ...runtime, realInstaller: true }),
+        outputDirectory: assets,
+        version,
+        ...tuple,
+        ...runtime,
+      });
+    }
   }
   createReleaseManifest({
     outputDirectory: assets,
@@ -372,6 +415,7 @@ function runBootstrap(
   fixture: ReturnType<typeof bootstrapFixture>,
   versionArguments: string[] = [],
   overrides: {
+    nodeMajor?: string;
     nodeAbi?: string;
     releasesUrl?: string;
     configPath?: string;
@@ -383,7 +427,8 @@ function runBootstrap(
     ...process.env,
     PATH: `${fixture.fakeBin}${path.delimiter}${process.env.PATH ?? ''}`,
     SPOOL_RELEASE_BASE_URL: overrides.releasesUrl ?? `file://${fixture.releases}`,
-    SPOOL_TEST_NODE_ABI: overrides.nodeAbi ?? RELEASE_NODE_ABI.toString(),
+    SPOOL_TEST_NODE_MAJOR: overrides.nodeMajor ?? node24Runtime.nodeMajor.toString(),
+    SPOOL_TEST_NODE_ABI: overrides.nodeAbi ?? node24Runtime.nodeAbi.toString(),
     SPOOL_TEST_REAL_NODE: process.execPath,
     SPOOL_TEST_RECORD: fixture.recordPath,
   };
@@ -407,7 +452,7 @@ function runBootstrap(
 
 function createCandidate(
   root: string,
-  options: ReleaseTuple & { readonly realInstaller: boolean },
+  options: ReleaseTuple & ReleaseRuntime & { readonly realInstaller: boolean },
 ): string {
   const candidate = mkdtempSync(path.join(root, 'candidate-'));
   mkdirSync(path.join(candidate, 'bin'), { recursive: true });
@@ -422,8 +467,8 @@ function createCandidate(
     `${JSON.stringify({
       platform: options.platform,
       architecture: options.architecture,
-      nodeMajor: 24,
-      nodeAbi: RELEASE_NODE_ABI,
+      nodeMajor: options.nodeMajor,
+      nodeAbi: options.nodeAbi,
     })}\n`,
   );
   const cli = path.join(candidate, 'dist/cli/index.js');
