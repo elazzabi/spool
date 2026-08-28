@@ -27,11 +27,8 @@ export function compareWorkspaceFingerprints(
   const fields: ReadonlyArray<keyof WorkspaceFingerprint> = [
     'repository',
     'canonicalWorkspace',
-    'workspaceIdentity',
     'gitDirectory',
-    'gitDirectoryIdentity',
     'gitCommonDirectory',
-    'gitCommonDirectoryIdentity',
     'branch',
     'detached',
     'head',

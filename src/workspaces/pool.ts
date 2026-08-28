@@ -443,11 +443,12 @@ export class WorkspacePool {
       );
     }
     const inspection = await this.#inspect(configured.clone, configured.repository);
-    if (!inspection.eligible || !inspection.fingerprint) {
+    const inspectionProblem = workspaceInspectionProblem(inspection);
+    if (inspectionProblem) {
       return this.#refuseCliAcknowledgmentRequest(
         canonical,
         request,
-        `Workspace is still unsafe: ${inspection.reasons.map((item) => item.message).join('; ')}`,
+        `Workspace is still unsafe: ${inspectionProblem}`,
         inspection,
       );
     }
@@ -588,22 +589,20 @@ export class WorkspacePool {
       }
     }
     const inspection = await this.#inspect(context.configuredClone, context.handle.repository);
-    if (!inspection.eligible || !inspection.fingerprint) {
+    const inspectionProblem = workspaceInspectionProblem(inspection);
+    if (inspectionProblem) {
       return this.#refuseWorkspaceAcknowledgment(
         disposition,
         successorText,
-        `Workspace is still unsafe: ${inspection.reasons.map((item) => item.message).join('; ')}`,
+        `Workspace is still unsafe: ${inspectionProblem}`,
         inspection,
       );
     }
-    if (
-      !samePath(inspection.canonicalWorkspace ?? '', disposition.canonicalWorkspace) ||
-      !sameWorkspaceIdentity(inspection.fingerprint, context.handle.baseline)
-    ) {
+    if (!samePath(inspection.canonicalWorkspace ?? '', disposition.canonicalWorkspace)) {
       return this.#refuseWorkspaceAcknowledgment(
         disposition,
         successorText,
-        'Configured workspace identity changed after quarantine',
+        'Configured workspace path changed after quarantine',
         inspection,
       );
     }
@@ -724,10 +723,11 @@ export class WorkspacePool {
       );
     }
     const inspection = await this.#inspect(configured.clone, configured.repository);
-    if (!inspection.eligible || !inspection.fingerprint) {
+    const inspectionProblem = workspaceInspectionProblem(inspection);
+    if (inspectionProblem) {
       return this.#refusePendingCliAcknowledgment(
         disposition,
-        `Workspace is still unsafe: ${inspection.reasons.map((item) => item.message).join('; ')}`,
+        `Workspace is still unsafe: ${inspectionProblem}`,
         inspection,
       );
     }
@@ -876,16 +876,13 @@ export class WorkspacePool {
   }
 }
 
-function sameWorkspaceIdentity(
-  current: WorkspaceFingerprint,
-  baseline: WorkspaceFingerprint,
-): boolean {
-  return (
-    current.workspaceIdentity.device === baseline.workspaceIdentity.device &&
-    current.workspaceIdentity.inode === baseline.workspaceIdentity.inode &&
-    current.gitDirectoryIdentity.device === baseline.gitDirectoryIdentity.device &&
-    current.gitDirectoryIdentity.inode === baseline.gitDirectoryIdentity.inode &&
-    current.gitCommonDirectoryIdentity.device === baseline.gitCommonDirectoryIdentity.device &&
-    current.gitCommonDirectoryIdentity.inode === baseline.gitCommonDirectoryIdentity.inode
-  );
+function workspaceInspectionProblem(inspection: WorkspaceInspection): string | null {
+  if (!inspection.fingerprint) {
+    return `Workspace could not be inspected: ${inspection.reasons.map((item) => item.message).join('; ')}`;
+  }
+  if (inspection.fingerprint.status.entries.length > 0) {
+    const dirty = inspection.reasons.find(({ code }) => code === 'worktree-dirty');
+    return dirty?.message ?? 'The clone has uncommitted or untracked changes';
+  }
+  return null;
 }

@@ -229,6 +229,20 @@ describe('workspace pool', () => {
     });
   });
 
+  it('keeps a clean lease valid after filesystem device IDs change', async () => {
+    const root = fixtureRoot();
+    const clone = createRepository(root, 'clone');
+    const { ledger } = createLedger(root, 'state');
+    const pool = poolFor(ledger, [clone]);
+    const attempt = createAttempt(ledger, 'device-drift-before-spawn');
+    const handle = acquiredHandle(await pool.acquire({ repository: 'example/widget', ...attempt }));
+    handle.baseline.workspaceIdentity.device = 'previous-device';
+    handle.baseline.gitDirectoryIdentity.device = 'previous-device';
+    handle.baseline.gitCommonDirectoryIdentity.device = 'previous-device';
+
+    await expect(pool.verifyBeforeSpawn(handle)).resolves.toMatchObject({ kind: 'verified' });
+  });
+
   it('quarantines terminal branch, HEAD, remote, and file changes with human action data', async () => {
     const root = fixtureRoot();
     const clone = createRepository(root, 'clone');
@@ -388,6 +402,21 @@ describe('workspace pool', () => {
     expect(request?.reason).toContain('fixture release failure');
   });
 
+  it('acknowledges a clean quarantine through the CLI after origin changes', async () => {
+    const root = fixtureRoot();
+    const clone = createRepository(root, 'clone');
+    const { ledger } = createLedger(root, 'state');
+    const pool = poolFor(ledger, [clone]);
+    const attempt = createAttempt(ledger, 'cli-origin-drift');
+    const handle = acquiredHandle(await pool.acquire({ repository: 'example/widget', ...attempt }));
+    git(clone, ['checkout', '-b', 'human-reviewed']);
+    await pool.reconcileDisposition(handle);
+    git(clone, ['remote', 'remove', 'origin']);
+
+    await expect(pool.acknowledge(clone)).resolves.toMatchObject({ kind: 'released' });
+    expect(git(clone, ['branch', '--show-current'])).toBe('main');
+  });
+
   it('refuses a CLI acknowledgment when its sentinel was missing before approval', async () => {
     const root = fixtureRoot();
     const clone = createRepository(root, 'clone');
@@ -452,6 +481,33 @@ describe('workspace pool', () => {
     expect(() => statSync(path.join(clone, 'reviewed.txt'))).toThrow();
   });
 
+  it('restores a clean workspace after filesystem device IDs change', async () => {
+    const root = fixtureRoot();
+    const clone = createRepository(root, 'clone');
+    const { database, ledger } = createLedger(root, 'state');
+    const pool = poolFor(ledger, [clone]);
+    const attempt = createAttempt(ledger, 'checked-device-drift');
+    const handle = acquiredHandle(await pool.acquire({ repository: 'example/widget', ...attempt }));
+    git(clone, ['checkout', '-b', 'human-reviewed']);
+    await pool.reconcileDisposition(handle);
+
+    const lease = ledger.getLease(clone);
+    if (!lease?.metadata) throw new Error('Expected persisted workspace lease metadata');
+    const metadata = structuredClone(lease.metadata);
+    const persisted = parseWorkspaceLeaseHandle(metadata, lease);
+    if (!persisted) throw new Error('Expected persisted workspace lease handle');
+    persisted.baseline.workspaceIdentity.device = 'previous-device';
+    persisted.baseline.gitDirectoryIdentity.device = 'previous-device';
+    persisted.baseline.gitCommonDirectoryIdentity.device = 'previous-device';
+    database.raw
+      .prepare('UPDATE workspace_leases SET lease_metadata_json = ? WHERE canonical_workspace = ?')
+      .run(JSON.stringify(metadata), clone);
+
+    const claim = claimWorkspaceAction(ledger, handle);
+    await expect(pool.acknowledgeClaim(claim)).resolves.toMatchObject({ kind: 'released' });
+    expect(git(clone, ['branch', '--show-current'])).toBe('main');
+  });
+
   it('restores the captured non-main branch without running checkout hooks', async () => {
     const root = fixtureRoot();
     const clone = createRepository(root, 'clone');
@@ -469,6 +525,27 @@ describe('workspace pool', () => {
 
     await expect(pool.acknowledgeClaim(claim)).resolves.toMatchObject({ kind: 'released' });
     expect(git(clone, ['branch', '--show-current'])).toBe('develop');
+  });
+
+  it('keeps a clean detached commit quarantined during acknowledgment', async () => {
+    const root = fixtureRoot();
+    const clone = createRepository(root, 'clone');
+    const { ledger } = createLedger(root, 'state');
+    const pool = poolFor(ledger, [clone]);
+    const attempt = createAttempt(ledger, 'checked-detached-head');
+    const handle = acquiredHandle(await pool.acquire({ repository: 'example/widget', ...attempt }));
+    git(clone, ['checkout', '--detach']);
+    writeFileSync(path.join(clone, 'detached.txt'), 'preserve this commit\n');
+    git(clone, ['add', 'detached.txt']);
+    git(clone, ['commit', '-m', 'detached work']);
+    const detachedHead = git(clone, ['rev-parse', 'HEAD']);
+    await pool.reconcileDisposition(handle);
+    const claim = claimWorkspaceAction(ledger, handle);
+
+    await expect(pool.acknowledgeClaim(claim)).resolves.toMatchObject({ kind: 'refused' });
+    expect(git(clone, ['branch', '--show-current'])).toBe('');
+    expect(git(clone, ['rev-parse', 'HEAD'])).toBe(detachedHead);
+    expect(ledger.getLease(clone)?.state).toBe('Quarantined');
   });
 
   it('keeps quarantine when the captured branch ref moved', async () => {
@@ -552,7 +629,7 @@ describe('workspace pool', () => {
     expect(statSync(path.join(clone, '.git', WORKSPACE_SENTINEL_NAME)).isFile()).toBe(true);
   });
 
-  it('reports non-branch fingerprint drift before same-branch commit drift', async () => {
+  it('releases a clean workspace after remote metadata changes', async () => {
     const root = fixtureRoot();
     const clone = createRepository(root, 'clone');
     const { ledger } = createLedger(root, 'state');
@@ -563,11 +640,7 @@ describe('workspace pool', () => {
     await pool.reconcileDisposition(handle);
     const claim = claimWorkspaceAction(ledger, handle);
 
-    const outcome = await pool.acknowledgeClaim(claim);
-    expect(outcome.kind).toBe('refused');
-    if (outcome.kind !== 'refused') throw new Error('Expected acknowledgment refusal');
-    expect(outcome.reason).toMatch(/remotes/i);
-    expect(ledger.listFollowUps(attempt.jobId).at(-1)?.text).not.toMatch(/captured commit/i);
+    await expect(pool.acknowledgeClaim(claim)).resolves.toMatchObject({ kind: 'released' });
   });
 
   it('acknowledges a canonical lease through its configured symlink path', async () => {

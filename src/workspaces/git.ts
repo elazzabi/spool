@@ -7,7 +7,6 @@ import { spawn } from 'node:child_process';
 import { normalizeGitHubRepository } from '../config/schema.js';
 import { samePath } from '../config/paths.js';
 import { inspectGitOperations, type GitOperationMarker } from './operations.js';
-import { compareWorkspaceFingerprints } from './quarantine.js';
 
 export interface GitCommandResult {
   stdout: Buffer;
@@ -211,28 +210,34 @@ export async function restoreWorkspaceBaselineBranch(
   const runner = options.runner ?? new NodeGitRunner();
   const current = await inspectGitWorkspace(configuredPath, requestedRepository, { runner });
   const currentFingerprint = current.fingerprint;
-  if (!current.eligible || !currentFingerprint) {
+  if (!currentFingerprint) {
     return {
       kind: 'refused',
-      reason: `Workspace is still unsafe: ${current.reasons.map(({ message }) => message).join('; ')}`,
+      reason: `Workspace could not be inspected: ${current.reasons.map(({ message }) => message).join('; ')}`,
       inspection: current,
     };
   }
-
-  const differences = compareWorkspaceFingerprints(baseline, currentFingerprint);
-  if (differences.length === 0) return { kind: 'already-restored', inspection: current };
-  if (!baseline.branch || !currentFingerprint.branch) {
+  if (currentFingerprint.status.entries.length > 0) {
     return {
       kind: 'refused',
-      reason: 'Baseline restoration requires attached baseline and current branches',
+      reason: `Workspace is not clean (${describeStatus(currentFingerprint.status)})`,
       inspection: current,
     };
   }
-  const unsafeDifference = differences.find(({ field }) => field !== 'branch' && field !== 'head');
-  if (unsafeDifference) {
+  if (currentFingerprint.branch === baseline.branch && currentFingerprint.head === baseline.head) {
+    return { kind: 'already-restored', inspection: current };
+  }
+  if (!currentFingerprint.branch) {
     return {
       kind: 'refused',
-      reason: `Workspace changed beyond its branch and commit (${unsafeDifference.field})`,
+      reason: 'Baseline restoration requires an attached current branch',
+      inspection: current,
+    };
+  }
+  if (!baseline.branch) {
+    return {
+      kind: 'refused',
+      reason: 'Baseline restoration requires an attached baseline branch',
       inspection: current,
     };
   }
@@ -299,9 +304,12 @@ export async function restoreWorkspaceBaselineBranch(
   }
 
   const inspection = await inspectGitWorkspace(configuredPath, requestedRepository, { runner });
+  const restored = inspection.fingerprint;
   if (
-    !inspection.eligible ||
-    compareWorkspaceFingerprints(baseline, inspection.fingerprint).length > 0
+    !restored ||
+    restored.status.entries.length > 0 ||
+    restored.branch !== baseline.branch ||
+    restored.head !== baseline.head
   ) {
     return {
       kind: 'refused',
