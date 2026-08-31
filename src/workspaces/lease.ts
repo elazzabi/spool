@@ -370,10 +370,18 @@ export class SystemProcessIdentityProvider implements ProcessIdentityProvider {
   }
 
   async compare(pid: number, startIdentity: string): Promise<ProcessMatch> {
+    if (isObservedProcessIdentity(pid, startIdentity)) {
+      return processExists(pid) ? 'unknown' : 'not-running';
+    }
     const current = await processStartIdentity(pid);
     if (current === null) return processExists(pid) ? 'unknown' : 'not-running';
     return current === startIdentity ? 'match' : 'different';
   }
+}
+
+function isObservedProcessIdentity(pid: number, startIdentity: string): boolean {
+  const prefix = `pid:${String(pid)}:observed:`;
+  return startIdentity.startsWith(prefix) && /^\d+$/.test(startIdentity.slice(prefix.length));
 }
 
 async function readSentinel(commonDirectory: string): Promise<ReadSentinel> {

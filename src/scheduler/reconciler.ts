@@ -4,7 +4,7 @@ import path from 'node:path';
 import { spoolArgv } from '../cli/output.js';
 import { samePath } from '../config/paths.js';
 import type { SpoolConfig } from '../config/schema.js';
-import { isTerminalJobState, type Attempt, type Job } from '../domain/job.js';
+import { isTerminalJobState, type Attempt, type Job, type WorkspaceLease } from '../domain/job.js';
 import {
   currentProcessStartIdentity,
   DaemonLock,
@@ -25,6 +25,7 @@ import {
   workspaceAcknowledgmentText,
   type WorkspaceAcknowledgmentIdentity,
 } from '../workspaces/acknowledgment.js';
+import { SystemProcessIdentityProvider, type ProcessMatch } from '../workspaces/lease.js';
 import { WorkspacePool, type WorkspaceAcknowledgement } from '../workspaces/pool.js';
 import { parseWorkspaceLeaseHandle } from '../workspaces/persisted-lease.js';
 import { JobDispatcher, type DispatchResult } from './dispatcher.js';
@@ -36,6 +37,8 @@ export type ProviderObservationRunner = (
   adapter: ProviderAdapter,
   sessionId: string,
 ) => Promise<readonly ProviderEvidence[]>;
+
+type AttemptProcessComparator = (pid: number, startIdentity: string) => Promise<ProcessMatch>;
 
 export interface ReconciliationPassOptions {
   awaitLaunched?: boolean;
@@ -80,6 +83,7 @@ export class Reconciler {
   readonly #daemonLock: DaemonLock;
   readonly #owner: DaemonOwnershipIdentity;
   readonly #observeProvider: ProviderObservationRunner;
+  readonly #compareAttemptProcess: AttemptProcessComparator;
   readonly #operationalLog: ReconcilerOperationalLog | null;
   readonly #now: () => Date;
   #ownsLock = false;
@@ -102,6 +106,7 @@ export class Reconciler {
     daemonLock?: DaemonLock;
     owner?: DaemonOwnershipIdentity;
     observeProvider?: ProviderObservationRunner;
+    compareAttemptProcess?: AttemptProcessComparator;
     operationalLog?: ReconcilerOperationalLog;
     now?: () => Date;
   }) {
@@ -158,6 +163,9 @@ export class Reconciler {
       processStartIdentity: currentProcessStartIdentity(),
     };
     this.#observeProvider = options.observeProvider ?? (() => Promise.resolve([]));
+    const attemptProcesses = new SystemProcessIdentityProvider();
+    this.#compareAttemptProcess =
+      options.compareAttemptProcess ?? ((pid, birth) => attemptProcesses.compare(pid, birth));
     this.#operationalLog = options.operationalLog ?? null;
     this.#now = options.now ?? (() => new Date());
   }
@@ -430,6 +438,7 @@ export class Reconciler {
 
   async #recoverCrashBoundaries(): Promise<void> {
     const leases = this.#ledger.listLeases();
+    const leasesByAttemptId = new Map(leases.map((lease) => [lease.attemptId, lease]));
     for (const lease of leases.filter(
       (candidate) =>
         candidate.state === 'Quarantined' &&
@@ -463,8 +472,10 @@ export class Reconciler {
       this.#dispatcher.reportDisposition(lease.jobId, handle, disposition);
     }
     for (const attempt of this.#ledger.listRecoverableAttempts()) {
-      if (attempt.state === 'Prepared') {
-        const lease = this.#ledger.listLeases().find((item) => item.attemptId === attempt.id);
+      if (attempt.state === 'Uncertain') {
+        await this.#recoverCancelledUncertainAttempt(attempt, leasesByAttemptId.get(attempt.id));
+      } else if (attempt.state === 'Prepared') {
+        const lease = leasesByAttemptId.get(attempt.id);
         const handle = lease
           ? parseWorkspaceLeaseHandle(attempt.launchMetadata ?? lease.metadata, lease)
           : null;
@@ -511,6 +522,34 @@ export class Reconciler {
         }
       }
     }
+  }
+
+  async #recoverCancelledUncertainAttempt(
+    attempt: Attempt,
+    lease: WorkspaceLease | undefined,
+  ): Promise<void> {
+    if (attempt.processId === null || attempt.processStartIdentity === null) {
+      return;
+    }
+    const job = this.#ledger.getJob(attempt.jobId);
+    if (!job?.cancellationRequested) return;
+    const processMatch = await this.#compareAttemptProcess(
+      attempt.processId,
+      attempt.processStartIdentity,
+    );
+    if (processMatch === 'match' || processMatch === 'unknown') return;
+
+    if (lease) {
+      const handle = parseWorkspaceLeaseHandle(attempt.launchMetadata ?? lease.metadata, lease);
+      if (!handle) {
+        throw new Error(
+          `Cancelled uncertain attempt ${attempt.id} has no durable workspace lease metadata`,
+        );
+      }
+      const disposition = await this.#workspaces.reconcileDisposition(handle);
+      this.#dispatcher.reportDisposition(job.id, handle, disposition);
+    }
+    this.#ledger.confirmCancellation(job.id, attempt.id);
   }
 
   async #reconcileWorkspaceActions(scan: MarkdownNoteScanResult): Promise<void> {

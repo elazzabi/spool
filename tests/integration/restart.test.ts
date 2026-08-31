@@ -15,8 +15,10 @@ import type { ProviderAdapter, ProviderEvidence } from '../../src/providers/type
 import { Reconciler } from '../../src/scheduler/reconciler.js';
 import { WorkspacePool } from '../../src/workspaces/pool.js';
 import {
+  SystemProcessIdentityProvider,
   WorkspaceSentinelManager,
   type ProcessIdentityProvider,
+  type ProcessMatch,
 } from '../../src/workspaces/lease.js';
 
 const databases: LedgerDatabase[] = [];
@@ -62,6 +64,17 @@ describe('durable provider evidence', () => {
 });
 
 describe('reconciler restart boundaries', () => {
+  it('uses a liveness-only launch identity only as proof of process exit', async () => {
+    const identities = new SystemProcessIdentityProvider();
+
+    await expect(
+      identities.compare(process.pid, `pid:${String(process.pid)}:observed:1`),
+    ).resolves.toBe('unknown');
+    await expect(identities.compare(2_147_483_647, 'pid:2147483647:observed:1')).resolves.toBe(
+      'not-running',
+    );
+  });
+
   it('repairs a claimed queued job whose initial receipt commit was interrupted', async () => {
     const fixture = restartFixture('fake');
     const database = openLedgerDatabase(fixture.state);
@@ -135,45 +148,136 @@ describe('reconciler restart boundaries', () => {
     await reconciler.shutdown();
   });
 
-  it('marks an interrupted Claude print session uncertain without relaunching it', async () => {
-    const fixture = restartFixture('claude');
-    const database = openLedgerDatabase(fixture.state);
-    databases.push(database);
-    const ledger = new LedgerRepository(database);
-    const outbox = new OutboxRepository(database);
-    const registry = new ProviderRegistry([namedFakeProvider('claude')]);
-    const job = ledger.claimJob({
-      sourceMarker: 'claude-foreground-restart',
-      sourcePath: fixture.note,
-      provider: 'claude',
-      directive: 'Review',
-      context: 'Repository (direct): example/widget',
-      repository: 'example/widget',
-    });
-    const logPath = path.join(fixture.state, 'logs', 'claude-foreground.log');
-    closeSync(openSync(logPath, 'wx', 0o600));
-    const attempt = ledger.prepareAttempt(job.id, logPath);
-    ledger.transitionAttempt(attempt.id, 'Launching');
-    ledger.recordAttemptSession(attempt.id, 'claude', 'fake-foreground');
-    ledger.transitionAttempt(attempt.id, 'Running');
-    ledger.transitionJob(job.id, 'Working');
-    const reconciler = new Reconciler({
-      config: fixture.config,
-      database,
-      ledger,
-      outbox,
-      providers: registry,
-      observeProvider: () => Promise.resolve([]),
-    });
+  it.each(['match', 'unknown'] as const)(
+    'keeps an interrupted Claude session locked when its process identity is %s',
+    async (processMatch: ProcessMatch) => {
+      const fixture = restartFixture('claude');
+      const database = openLedgerDatabase(fixture.state);
+      databases.push(database);
+      const ledger = new LedgerRepository(database);
+      const outbox = new OutboxRepository(database);
+      const registry = new ProviderRegistry([namedFakeProvider('claude')]);
+      const job = ledger.claimJob({
+        sourceMarker: 'claude-foreground-restart',
+        sourcePath: fixture.note,
+        provider: 'claude',
+        directive: 'Review',
+        context: 'Repository (direct): example/widget',
+        repository: 'example/widget',
+      });
+      const logPath = path.join(fixture.state, 'logs', 'claude-foreground.log');
+      closeSync(openSync(logPath, 'wx', 0o600));
+      const attempt = ledger.prepareAttempt(job.id, logPath);
+      const workspaces = new WorkspacePool({ repositories: fixture.config.repositories, ledger });
+      const acquired = await workspaces.acquire({
+        repository: 'example/widget',
+        jobId: job.id,
+        attemptId: attempt.id,
+      });
+      if (acquired.kind !== 'acquired') throw new Error('Expected workspace acquisition');
+      ledger.transitionAttempt(attempt.id, 'Launching');
+      ledger.recordAttemptSession(attempt.id, 'claude', 'fake-foreground');
+      ledger.recordAttemptProcess(attempt.id, {
+        pid: 900,
+        processStartIdentity: 'provider-process',
+      });
+      ledger.transitionAttempt(attempt.id, 'Running');
+      ledger.transitionJob(job.id, 'Working');
+      const reconciler = new Reconciler({
+        config: fixture.config,
+        database,
+        ledger,
+        outbox,
+        providers: registry,
+        workspaces,
+        observeProvider: () => Promise.resolve([]),
+        compareAttemptProcess: () => Promise.resolve(processMatch),
+      });
 
-    await reconciler.runPass();
+      await reconciler.runPass();
+      ledger.requestCancellation(job.id);
+      await reconciler.runPass();
 
-    expect(ledger.getAttempt(attempt.id)?.state).toBe('Uncertain');
-    expect(ledger.getAttempt(attempt.id)?.uncertaintyReason).toMatch(/cannot be observed/i);
-    expect(ledger.getJob(job.id)?.state).toBe('Working');
-    expect(ledger.listAttempts(job.id)).toHaveLength(1);
-    await reconciler.shutdown();
-  });
+      expect(ledger.getAttempt(attempt.id)?.state).toBe('Uncertain');
+      expect(ledger.getAttempt(attempt.id)?.uncertaintyReason).toMatch(/cannot be observed/i);
+      expect(ledger.getJob(job.id)).toMatchObject({
+        state: 'Working',
+        cancellationRequested: true,
+      });
+      expect(ledger.getLease(acquired.handle.canonicalWorkspace)?.state).toBe('Held');
+      expect(ledger.listAttempts(job.id)).toHaveLength(1);
+      await reconciler.shutdown();
+    },
+  );
+
+  it.each(['not-running', 'different'] as const)(
+    'releases a cancelled uncertain attempt when its process identity is %s',
+    async (processMatch: ProcessMatch) => {
+      const fixture = restartFixture('claude');
+      const database = openLedgerDatabase(fixture.state);
+      databases.push(database);
+      const ledger = new LedgerRepository(database);
+      const outbox = new OutboxRepository(database);
+      const oldPool = new WorkspacePool({
+        repositories: fixture.config.repositories,
+        ledger,
+        sentinels: new WorkspaceSentinelManager({
+          ownerNonce: 'old-owner',
+          processIdentity: identityProvider(700, 'old-daemon'),
+        }),
+      });
+      const job = ledger.claimJob({
+        sourceMarker: 'cancelled-uncertain',
+        sourcePath: fixture.note,
+        provider: 'claude',
+        directive: 'Review',
+        context: 'Repository (direct): example/widget',
+        repository: 'example/widget',
+      });
+      const logPath = path.join(fixture.state, 'logs', 'cancelled-uncertain.log');
+      closeSync(openSync(logPath, 'wx', 0o600));
+      const attempt = ledger.prepareAttempt(job.id, logPath);
+      const acquired = await oldPool.acquire({
+        repository: 'example/widget',
+        jobId: job.id,
+        attemptId: attempt.id,
+      });
+      if (acquired.kind !== 'acquired') throw new Error('Expected workspace acquisition');
+      ledger.transitionAttempt(attempt.id, 'Launching');
+      ledger.recordAttemptProcess(attempt.id, {
+        pid: 900,
+        processStartIdentity: 'provider-process',
+      });
+      ledger.transitionAttempt(attempt.id, 'Running');
+      ledger.transitionJob(job.id, 'Working');
+      ledger.markAttemptUncertain(attempt.id, 'daemon restarted');
+      ledger.requestCancellation(job.id);
+      const restartedPool = new WorkspacePool({
+        repositories: fixture.config.repositories,
+        ledger,
+        sentinels: new WorkspaceSentinelManager({
+          ownerNonce: 'new-owner',
+          processIdentity: identityProvider(800, 'new-daemon'),
+        }),
+      });
+      const reconciler = new Reconciler({
+        config: fixture.config,
+        database,
+        ledger,
+        outbox,
+        providers: new ProviderRegistry([namedFakeProvider('claude')]),
+        workspaces: restartedPool,
+        compareAttemptProcess: () => Promise.resolve(processMatch),
+      });
+
+      await reconciler.runPass();
+
+      expect(ledger.getAttempt(attempt.id)?.state).toBe('Terminal');
+      expect(ledger.getJob(job.id)?.state).toBe('Cancelled');
+      expect(ledger.getLease(acquired.handle.canonicalWorkspace)?.state).toBe('Released');
+      await reconciler.shutdown();
+    },
+  );
 
   it('releases a Prepared crash-boundary lease using lease-owned metadata', async () => {
     const fixture = restartFixture('fake');
@@ -224,21 +328,12 @@ describe('reconciler restart boundaries', () => {
     const ledger = new LedgerRepository(database);
     const outbox = new OutboxRepository(database);
     let oldOwnerLive = true;
-    const identityProvider = (pid: number, birth: string): ProcessIdentityProvider => ({
-      current: () => Promise.resolve({ pid, startIdentity: birth }),
-      compare: (candidatePid, candidateBirth) =>
-        Promise.resolve(
-          candidatePid === 700 && candidateBirth === 'old-birth' && oldOwnerLive
-            ? 'match'
-            : 'not-running',
-        ),
-    });
     const oldPool = new WorkspacePool({
       repositories: fixture.config.repositories,
       ledger,
       sentinels: new WorkspaceSentinelManager({
         ownerNonce: 'old-owner',
-        processIdentity: identityProvider(700, 'old-birth'),
+        processIdentity: identityProvider(700, 'old-birth', () => oldOwnerLive),
       }),
     });
     const job = ledger.claimJob({
@@ -356,6 +451,20 @@ function namedFakeProvider(name: string): ProviderAdapter {
     inspectCommand: (sessionId) => fake.inspectCommand(sessionId),
     resumeCommand: (sessionId) => fake.resumeCommand(sessionId),
     cancelCommand: (sessionId) => fake.cancelCommand(sessionId),
+  };
+}
+
+function identityProvider(
+  pid: number,
+  birth: string,
+  isLive: () => boolean = () => true,
+): ProcessIdentityProvider {
+  return {
+    current: () => Promise.resolve({ pid, startIdentity: birth }),
+    compare: (candidatePid, candidateBirth) =>
+      Promise.resolve(
+        candidatePid === pid && candidateBirth === birth && isLive() ? 'match' : 'not-running',
+      ),
   };
 }
 
